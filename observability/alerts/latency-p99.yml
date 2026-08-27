@@ -1,0 +1,98 @@
+# Grafana Alert Rule — High Latency p99
+# Condition: p99 latency > 2000ms for 5 minutes per service
+# Severity: warning
+
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: platform-latency
+    folder: Platform Alerts
+    interval: 1m
+    rules:
+      - uid: latency-p99-high
+        title: High Latency p99
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: >
+                histogram_quantile(0.99,
+                  sum(rate(http_request_duration_ms_bucket[5m])) by (service, le)
+                )
+              intervalMs: 15000
+              maxDataPoints: 43200
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params: []
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 2000    # 2000ms latency threshold
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High p99 latency on {{ $labels.service }}"
+          description: >
+            Service {{ $labels.service }} p99 latency is {{ $values.B.Value | printf "%.0f" }}ms
+            (threshold: 2000ms) for the last 5 minutes.
+          runbook: "docs/how-to/scale-ecs-service.md"
+        isPaused: false

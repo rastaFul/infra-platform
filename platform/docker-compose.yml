@@ -1,0 +1,61 @@
+# infra-platform/platform/docker-compose.yml
+# New platform services: Vault + OTEL Collector
+# Requires platform_net: cd ~/projects/services/platform && docker compose --env-file .env up -d
+# Start: docker compose --env-file .env up -d
+
+networks:
+  platform_net:
+    name: platform_net
+    external: true  # owned by services/platform/
+
+volumes:
+  vault_data:
+  vault_logs:
+
+services:
+  vault:
+    image: hashicorp/vault:1.17
+    container_name: platform-vault
+    networks:
+      - platform_net
+    ports:
+      - "127.0.0.1:8200:8200"
+    volumes:
+      - vault_data:/vault/data
+      - vault_logs:/vault/logs
+      - ./vault/config/vault.hcl:/vault/config/vault.hcl:ro
+      - ./vault/policies:/vault/policies:ro
+    environment:
+      - VAULT_ADDR=http://0.0.0.0:8200
+      - VAULT_API_ADDR=http://vault:8200
+    cap_add:
+      - IPC_LOCK
+    command: server
+    healthcheck:
+      test: ["CMD-SHELL", "vault status -address=http://localhost:8200 2>&1 | grep -E 'Initialized|sealed' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.103.0
+    container_name: platform-otel-collector
+    networks:
+      - platform_net
+    ports:
+      - "127.0.0.1:4317:4317"   # OTLP gRPC
+      - "127.0.0.1:4318:4318"   # OTLP HTTP
+      - "127.0.0.1:8888:8888"   # Collector metrics
+    volumes:
+      - ./otel/collector-config.yml:/etc/otelcol-contrib/config.yaml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8888/metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped

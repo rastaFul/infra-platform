@@ -1,0 +1,61 @@
+# OpenTelemetry Collector — Phase 0
+# Receives traces from all apps, routes to backends
+# Traces: dropped (no Tempo yet) — SDK instrumented from day 0
+# Logs: forward to Loki
+# Metrics: forward to Prometheus scrape endpoint
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+  resource:
+    attributes:
+      - key: environment
+        value: local
+        action: upsert
+  memory_limiter:
+    limit_mib: 256
+    spike_limit_mib: 64
+    check_interval: 5s
+
+exporters:
+  # Traces: discard for now (Phase 1 will add Tempo)
+  debug:
+    verbosity: basic
+    sampling_initial: 2
+    sampling_thereafter: 100
+
+  # Logs: forward to Loki
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    default_labels_enabled:
+      exporter: false
+      job: true
+
+  # Metrics: expose for Prometheus scrape
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: otel
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [loki]

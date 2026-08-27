@@ -1,0 +1,7 @@
+.env
+*.env.local
+.vault-init-*
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+**/.terraform.lock.hcl
