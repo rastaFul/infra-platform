@@ -12,11 +12,16 @@ The platform is designed to run on any cloud provider without application code c
 
 ## Phase Roadmap
 
+Updated 2026-08-27 (ADR 005, 007) — a free-tier cloud phase now sits between local and AWS. Rationale: none of the 5 projects generate revenue yet; validate the whole deploy pipeline (Terraform, CD, secrets, ingress) at $0 before committing to paid infra.
+
 | Phase | Environment | Scheduler | Ingress | Secrets |
 |-------|-------------|-----------|---------|---------|
-| 0 | WSL2 local | Docker Compose | Cloudflare Tunnel | Vault file backend |
-| 1 | AWS ECS Fargate | ECS + ALB | Cloudflare → ALB | Vault Raft + KMS |
-| 2 | Multi-cloud | ECS / Fly.io / GCP | Cloudflare (origin swap) | Vault HA |
+| 0 | WSL2 local | Docker Compose (direct) | Cloudflare Tunnel | Vault file backend |
+| 1 | `oci-free` — Oracle Cloud Always Free (ARM) | Coolify | Cloudflare Tunnel (relocated) | Vault (same instance, moved to VM) |
+| 2 | `aws-prod` — AWS ECS Fargate | ECS + ALB | Cloudflare → ALB | Vault Raft + KMS |
+| 3 | Multi-cloud | ECS / Fly.io / GCP | Cloudflare (origin swap) | Vault HA |
+
+See ADR 005 (environment strategy — promotion pipeline, why definitions are never duplicated), ADR 006 (Coolify as CD), ADR 007 (why Oracle specifically, risks accepted).
 
 ## Cloud Switch Playbook
 

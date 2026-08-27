@@ -71,22 +71,38 @@ Outputs: `record_id`, `fqdn`
 ---
 
 ### `k8s-service/`
-Reserved for Phase 2 — Kubernetes deployment (EKS or GKE).
+Reserved for Phase 3 — Kubernetes deployment (EKS or GKE). See ADR 001 for trigger conditions.
 
 Placeholder. Implements same interface as `ecs-service/` for future migration path.
 
 ---
 
+### `oci-compute/` — NOT YET IMPLEMENTED (see `docs/how-to/provision-oracle-free-tier.md`)
+Provisions the `oci-free` environment (ADR 007): VCN, subnet, security list (SSH only, no public app ports — Cloudflare Tunnel handles ingress), Ampere A1 Flex compute instance, boot volume, cloud-init bootstrap that installs Docker + Coolify.
+
+Planned inputs:
+- `region` — OCI region (prefer non-US, see how-to)
+- `ocpus`, `memory_in_gbs` — instance shape sizing (2 OCPU / 12GB per ADR 007)
+- `ssh_public_key` — for emergency access only (Coolify is the normal management path)
+
+Planned outputs: `instance_public_ip`, `instance_id`
+
+---
+
 ## Environments
 
-| File | Purpose |
-|------|---------|
-| `environments/local.tfvars` | Local dev variables (no real infra) |
-| `environments/staging.tfvars` | AWS staging account |
-| `environments/production.tfvars` | AWS production account |
+Restructured 2026-08-27 (ADR 005) — one directory per environment, not per AWS-only stage:
+
+| Environment | Directory | Cloud | Purpose |
+|---|---|---|---|
+| `local` | `environments/local/` | none (WSL2 Docker Compose) | Dev loop, all gates run here first |
+| `oci-free` | `environments/oci-free/` | Oracle Cloud (Always Free) | First real cloud target, $0 cost — ADR 007 |
+| `aws-prod` | `environments/production/` | AWS | Production, once justified by revenue |
+
+State backend: **Terraform Cloud** (free tier) for every environment, cloud-agnostic — see ADR 008. Never a cloud-specific backend (e.g. S3), to keep state storage decoupled from whichever cloud is in use.
 
 Usage:
 ```bash
-terraform plan -var-file=environments/staging.tfvars
-terraform apply -var-file=environments/production.tfvars
+terraform plan -var-file=environments/oci-free/terraform.tfvars
+terraform apply -var-file=environments/production/terraform.tfvars
 ```
