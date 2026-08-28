@@ -75,6 +75,11 @@ Usuário questionou a duplicação que eu tinha deixado passar. Auditoria confir
 - Falta só D2 (repo público/privado) antes de eu criar o repo `dev-environment` de fato.
 - `security-hardening-phase1` continua aguardando aprovação explícita (não confundir com a aprovação desta frente diferente).
 
+## Sessão 2026-08-27 (continuação 7) — dev-environment executado
+- D2 resolvida (privado). Repo `dev-environment` criado, 4 roles escritas, gates rodados (syntax-check + dry-run PASS, ansible-lint bloqueado por Python 3.8 da máquina). Ver D-2026-08-27-21.
+- Pendente: rodar de verdade (sem `--check`) — só dry-run até agora. Pendente também: pacotes (role `packages`) nunca testados de fato, precisa de sudo que esta sessão não tem.
+- Próxima ação: usuário decidir se quer que eu rode de verdade agora (aplica dotfiles + sync `~/.claude` completo) ou se prefere revisar o repo primeiro.
+
 Ver D-2026-08-27-15 (DECISIONS.md) e ADRs 010, 011, 012 em `infra-platform/docs/explanation/adr/` pro detalhe completo.
 
 ## Próxima ação (após desbloqueios 2-3): escrever módulo Terraform `oci-compute/` + `environments/oci-free/`

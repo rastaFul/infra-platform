@@ -41,11 +41,16 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 - [ ] `features/security-audit-auth-session/spec.md` — auditoria de sessão/senha/cookie por produto
 - [ ] `features/backup-strategy/spec.md` — backup de SQLite/Postgres/InfluxDB (pain point aberto desde a spec original de 12/08, nunca resolvido)
 
-## Ambiente de Desenvolvimento — APPROVED, pronto pra executar (spec 2026-08-27)
+## Ambiente de Desenvolvimento — Fase 1 DONE (repo criado, dry-run validado)
 
-- [x] Decidido: Ansible (não Vagrant) — sem repo legado a respeitar, começa do zero
-- [ ] `features/dev-environment-ansible/spec.md` — repo novo `dev-environment` (privado, pendente confirmação), roles: dotfiles, packages, agents-harness, credentials-check
-- [ ] Pendente só D2 (visibilidade do repo) antes de criar
+- [x] Decidido: Ansible (não Vagrant) — sem repo legado a respeitar
+- [x] Repo `dev-environment` criado (privado) — `github.com/rastaFul/dev-environment`
+- [x] 4 roles escritas: `credentials-check`, `packages`, `dotfiles`, `agents-harness`
+- [x] Gates: `--syntax-check` PASS, `--check --diff` dry-run PASS (0 failed)
+- [ ] Rodar de verdade nesta máquina (não `--check`) — fecha o drift achado em `~/.claude/skills`/`steering`
+- [ ] `ansible-lint` — pendente máquina com Python 3.9+
+- [ ] Validar `darwin.yml` no primeiro Mac real
+- Ver D-2026-08-27-21
 
 ## Fase 2+ — AWS (`aws-prod`) — NOT STARTED
 
