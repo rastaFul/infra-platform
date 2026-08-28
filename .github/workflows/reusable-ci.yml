@@ -64,11 +64,19 @@ jobs:
       - uses: pnpm/action-setup@v4
         if: inputs.package-manager == 'pnpm'
 
+      # No explicit cache-dependency-path here on purpose — the glob
+      # `working-directory/*.lock*` doesn't match either package-lock.json
+      # or pnpm-lock.yaml (neither has a literal ".lock" extension), and
+      # for pnpm monorepos the lockfile lives at the repo root, not in
+      # working-directory anyway (found running this for real 2026-08-28
+      # against artists-booking — the error is FATAL, aborts the job
+      # before lint/tsc/test/audit ever run). Letting setup-node's own
+      # default resolution find the lockfile is more robust than a
+      # hand-rolled glob across repos with different layouts.
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node-version }}
           cache: ${{ inputs.package-manager }}
-          cache-dependency-path: ${{ inputs.working-directory }}/*.lock*
 
       - name: Install dependencies
         run: |
