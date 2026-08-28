@@ -15,8 +15,8 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 
 - [ ] Conta Oracle Cloud (usuário) + API key
 - [ ] Conta Terraform Cloud (usuário) + token
-- [ ] Módulo Terraform `oci-compute/` (VCN, subnet, security list, instância ARM, cloud-init com Coolify)
-- [ ] `environments/oci-free/`
+- [x] Módulo Terraform `oci-compute/` (VCN, subnet, security list — só SSH, sem porta de app — instância ARM, cloud-init com Docker+Coolify) — escrito 2026-08-28, `validate`/`fmt`/`init` PASS, `plan` real bloqueado até as contas existirem (teto do testável agora)
+- [x] `environments/oci-free/` (backend Terraform Cloud, ADR 008)
 - [ ] Deploy da platform stack via Coolify no Oracle
 - [ ] Migração PM2 → Docker Compose (1 serviço por vez)
 - Ver ADR 005, 007, 008 | Spec: `docs/how-to/provision-oracle-free-tier.md` (DRAFT)

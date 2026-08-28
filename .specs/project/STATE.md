@@ -80,6 +80,14 @@ Usuário questionou a duplicação que eu tinha deixado passar. Auditoria confir
 - `security-audit-auth-session`: investigação completa (sub-agentes indisponíveis, feito direto). Achados: artists-booking sem rate limit em auth (HIGH) + cookie sem `secure` (MEDIUM) + bcrypt 10 rounds (LOW). rastafinancas maduro, sem achados. microgrow/vetcare sem superfície de auth custom relevante. Nenhuma correção aplicada — aguardando aprovação (Done Criteria da própria spec pede isso). Ver D-2026-08-28-4.
 - Próxima ação: usuário decidiu — spec delegada (`artists-booking/.specs/features/21-security-hardening/spec.md`, D-2026-08-28-5), sem correção agora.
 
+## Sessão 2026-08-28 (continuação 2) — 3 passos sem custo executados
+Usuário aprovou os 3 passos propostos (Vault AppRole, Batch 2, Terraform). Todos concluídos:
+1. **Vault AppRole**: segredos dos 4 projetos migrados pro Vault (KV v2). `.env` continua sendo o que a app lê (design deliberado — zero acoplamento do boot ao Vault). 1 bug real corrigido (heredoc bash mangling secrets com `$`/backtick). Ver D-2026-08-28-7.
+2. **Batch 2**: descoberta boa — dashboard `golden-signals.json` já cobre artists-booking/rastafinancas (Prometheus só começou a funcionar ontem), docker-compose por projeto já estava adequado. Único gap real: vetcare sem `/metrics` — spec delegada pro harness-dev. Ver D-2026-08-28-8.
+3. **Terraform `oci-compute`**: módulo completo escrito, gates reais rodados (`init`/`validate`/`fmt` PASS, `plan` bloqueado até conta existir — esperado). Bug real de `.gitignore` achado e corrigido (quase commitou 100MB+ de binário de provider). Ver D-2026-08-28-9.
+- Cron confirmado ativo pelo usuário (`sudo service cron start` rodado) — backup diário às 3h já vai disparar sozinho hoje.
+- Próxima ação: usuário decidir sobre criar conta Oracle Cloud + Terraform Cloud pra desbloquear o `plan`/`apply` real.
+
 ## Sessão 2026-08-28 (continuação) — backup-strategy EXECUTADA
 - Local ativo e testado de verdade: `scripts/backup.sh` roda SQLite (2x) + Postgres (vetcare) + 4 volumes Docker + chaves Vault, 89MB, restore validado. 1 bug real corrigido (rotate_weekly). Ver D-2026-08-28-6.
 - R2: pronto no código, desativado — usuário não quer gastar ainda. Cron configurado mas daemon precisa `sudo service cron start` (pendência do usuário, mesmo padrão de sempre nesta sessão sem sudo).
