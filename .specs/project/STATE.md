@@ -78,7 +78,12 @@ Usuário questionou a duplicação que eu tinha deixado passar. Auditoria confir
 ## Sessão 2026-08-28 (continuação) — smoke test + security-audit-auth-session
 - Smoke test pré-execução (pedido pelo usuário): Playwright MCP indisponível nesta sessão (server conectado no CLI mas tools não expostas ao agente) — substituído por checagem HTTP real. 6/6 domínios públicos respondendo normal (307/302), 10/10 PM2 online, 3 APIs tocados hoje com `/health` 200, proxy CORS funcionando ponta a ponta. Nada quebrado.
 - `security-audit-auth-session`: investigação completa (sub-agentes indisponíveis, feito direto). Achados: artists-booking sem rate limit em auth (HIGH) + cookie sem `secure` (MEDIUM) + bcrypt 10 rounds (LOW). rastafinancas maduro, sem achados. microgrow/vetcare sem superfície de auth custom relevante. Nenhuma correção aplicada — aguardando aprovação (Done Criteria da própria spec pede isso). Ver D-2026-08-28-4.
-- Próxima ação: usuário decidir se aprova correção dos achados de artists-booking, ou segue pra `backup-strategy`.
+- Próxima ação: usuário decidiu — spec delegada (`artists-booking/.specs/features/21-security-hardening/spec.md`, D-2026-08-28-5), sem correção agora.
+
+## Sessão 2026-08-28 (continuação) — backup-strategy EXECUTADA
+- Local ativo e testado de verdade: `scripts/backup.sh` roda SQLite (2x) + Postgres (vetcare) + 4 volumes Docker + chaves Vault, 89MB, restore validado. 1 bug real corrigido (rotate_weekly). Ver D-2026-08-28-6.
+- R2: pronto no código, desativado — usuário não quer gastar ainda. Cron configurado mas daemon precisa `sudo service cron start` (pendência do usuário, mesmo padrão de sempre nesta sessão sem sudo).
+- **Todas as 4 specs da frente de segurança + backup estão fechadas**: security-hardening-phase1 (DONE), security-audit-auth-session (investigação DONE, correção delegada pro harness-dev), backup-strategy (DONE, R2 pendente ativação do usuário), dev-environment-ansible (DONE, aplicado de verdade).
 
 ## Sessão 2026-08-28 — security-hardening-phase1 EXECUTADA COMPLETA
 Usuário aprovou ("pode executar tudo"). Todas as 5 tasks feitas: JWT fail-fast (artists-booking, rastafinancas), CORS exact-match (artists-booking, microgrow), `/metrics` token auth (3 APIs + prometheus.yml + docker-compose + 3 ecosystem.config.js), CI reusable workflow (5 apps, 4 repos), Vault init completo (KV v2, AppRole, policies pros 4 projetos).

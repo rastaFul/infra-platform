@@ -40,7 +40,7 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 - [x] `features/security-hardening-phase1/spec.md` — JWT fail-fast, CORS exact-match, `/metrics` token auth, CI gates (npm audit + trivy), Vault init + AppRole por projeto — todas as 5 tasks executadas, 6 bugs reais achados e corrigidos no processo (vault-init.sh x2, reusable CI workflow x3, colisão de sessão paralela x1)
 - [x] `features/security-audit-auth-session/spec.md` — investigação concluída. rastafinancas: maduro (rate limit por rota, secure condicional, bcrypt 12). artists-booking: 2 gaps (sem rate limit em auth — HIGH; cookie sem `secure` — MEDIUM; bcrypt 10 — LOW). microgrow/vetcare: sem superfície de auth custom relevante.
 - [x] Achados delegados pro `harness-dev`: spec `artists-booking/.specs/features/21-security-hardening/spec.md` (APPROVED, pronta pra execução com TDD quando o usuário pedir) — ver D-2026-08-28-5
-- [ ] `features/backup-strategy/spec.md` — backup de SQLite/Postgres/InfluxDB (pain point aberto desde a spec original de 12/08, nunca resolvido)
+- [x] `features/backup-strategy/spec.md` — backup local ativo e testado (SQLite, Postgres, 4 volumes Docker, Vault keys — 89MB, restore validado de verdade). Pain point aberto desde 12/08, **resolvido**. R2 (redundância remota) pronto no código, desativado de propósito (usuário não quer gastar ainda). Cron configurado, daemon precisa `sudo service cron start` (usuário)
 - [ ] Débito de código achado pelo CI novo (fora do escopo de infra, backlog do produto): CVE crítico `tar@7.5.11` + erros `tsc` em artists-booking
 
 ## Ambiente de Desenvolvimento — Fase 1 DONE (repo criado, dry-run validado)
