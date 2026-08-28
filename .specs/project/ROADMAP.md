@@ -41,9 +41,11 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 - [ ] `features/security-audit-auth-session/spec.md` — auditoria de sessão/senha/cookie por produto
 - [ ] `features/backup-strategy/spec.md` — backup de SQLite/Postgres/InfluxDB (pain point aberto desde a spec original de 12/08, nunca resolvido)
 
-## Ambiente de Desenvolvimento — NOT STARTED (spec escrita 2026-08-27)
+## Ambiente de Desenvolvimento — APPROVED, pronto pra executar (spec 2026-08-27)
 
-- [ ] `features/dev-environment-ansible/spec.md` — bootstrap Ansible (WSL2 + Linux + Mac), repo novo `dev-environment`
+- [x] Decidido: Ansible (não Vagrant) — sem repo legado a respeitar, começa do zero
+- [ ] `features/dev-environment-ansible/spec.md` — repo novo `dev-environment` (privado, pendente confirmação), roles: dotfiles, packages, agents-harness, credentials-check
+- [ ] Pendente só D2 (visibilidade do repo) antes de criar
 
 ## Fase 2+ — AWS (`aws-prod`) — NOT STARTED
 

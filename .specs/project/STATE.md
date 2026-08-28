@@ -68,7 +68,12 @@ Usuário questionou a duplicação que eu tinha deixado passar. Auditoria confir
   - `security-audit-auth-session/` — investigação (não execução) de hash/cookie/refresh-token por produto
   - `backup-strategy/` — pain point aberto desde 12/08, nunca resolvido
   - `dev-environment-ansible/` — Ansible em vez de Vagrant pro WSL2/Linux/Mac (D-2026-08-27-17), aguardando usuário mandar repo Vagrant existente
-- Próxima ação: usuário aprovar `security-hardening-phase1` (prioridade — tem achado crítico) e mandar conteúdo do repo Vagrant atual
+- Próxima ação: usuário aprovar `security-hardening-phase1` (prioridade — tem achado crítico)
+
+## Sessão 2026-08-27 (continuação 6) — dev-environment-ansible desbloqueada
+- Usuário confirmou: sem repo Vagrant pessoal (só empresa, fora de escopo). D1/D3 resolvidos, spec promovida DRAFT → APPROVED, tasks detalhadas escritas. Ver D-2026-08-27-20.
+- Falta só D2 (repo público/privado) antes de eu criar o repo `dev-environment` de fato.
+- `security-hardening-phase1` continua aguardando aprovação explícita (não confundir com a aprovação desta frente diferente).
 
 Ver D-2026-08-27-15 (DECISIONS.md) e ADRs 010, 011, 012 em `infra-platform/docs/explanation/adr/` pro detalhe completo.
 

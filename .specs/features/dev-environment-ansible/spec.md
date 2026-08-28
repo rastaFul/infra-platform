@@ -1,7 +1,8 @@
 # SPEC: Dev Environment — Bootstrap via Ansible
 
-## Status: DRAFT (aguardando detalhes do setup Vagrant existente do usuário)
+## Status: APPROVED (aguardando só D2 — visibilidade do repo)
 ## Created: 2026-08-27
+## Updated: 2026-08-27 — usuário confirmou: não existe repo pessoal ainda (só da empresa, fora de escopo/acesso). Começa do zero, sem legado pra respeitar.
 ## Owner: rodrigo
 
 ---
@@ -38,11 +39,23 @@ Repo novo `dev-environment` com playbooks Ansible que deixam uma máquina nova (
 4. `README.md` cobrindo os passos manuais irredutíveis (login GitHub, SSH key, Docker Desktop no Windows)
 5. Sem segredos no repo — só estrutura/config, credenciais reais ficam fora (gerenciador de senha pessoal do usuário)
 
-## Decisões Necessárias
+## Decisões
 
-- [ ] D1: usuário já tem um repo Vagrant existente — precisa ver o conteúdo antes de escrever tasks detalhadas, pra não duplicar/contradizer o que já funciona nas outras máquinas
-- [ ] D2: esse repo é público ou privado? (dotfiles geralmente podem ser públicos, mas confirmar)
-- [ ] D3: mantém Vagrant em paralelo pras máquinas que já usam (migração gradual), ou substitui de uma vez?
+- [x] D1: **resolvido** — não existe repo Vagrant pessoal (só da empresa, fora de escopo). Começa do zero, sem legado pra respeitar/migrar.
+- [ ] D2: repo público ou privado? Dotfiles costumam ser públicos (sem segredo dentro, por design — item 5 dos Done Criteria), mas é call sua. **Assumindo privado até você confirmar o contrário** (mesmo padrão dos outros repos infra criados nesta sessão) — não vou criar público sem confirmação explícita.
+- [x] D3: **resolvido** — sem Vagrant existente, não há "paralelo" a manter. Ansible desde o início.
+
+## Tasks
+
+| # | Task | Detalhe |
+|---|---|---|
+| 1 | Criar repo `dev-environment` (privado, pendente D2) | Estrutura Ansible padrão: `site.yml`, `roles/`, `inventory/` |
+| 2 | Role `dotfiles` | `.bashrc`/`.zshrc`, `.gitconfig`, aliases — usa os que já existem neste WSL2 (`~/.bashrc` atual) como base, não do zero absoluto |
+| 3 | Role `packages` — condicional por SO (`ansible_facts['os_family']`: Debian→apt, Darwin→homebrew) | git, docker (ou Docker Desktop check no Windows/WSL2), gh CLI, nvm+node, pnpm pinado, terraform, corepack |
+| 4 | Role `agents-harness` | Clona `github.com/rastaFul/agents-harness` + roda `claude/install.sh` no destino certo |
+| 5 | Role `credentials-check` (não gera, só verifica) | Checa presença de `~/.ssh/id_*`, `gh auth status`, avisa o que falta em vez de tentar automatizar login |
+| 6 | `README.md` | Passos manuais irredutíveis: Docker Desktop no Windows (WSL2 integration), login inicial GitHub/gh, geração de SSH key nova (se for máquina realmente nova) |
+| 7 | Testar em uma instalação WSL2 Ubuntu limpa (ou o mais próximo disso que der pra validar nesta máquina) — confirmar idempotência (rodar 2x, 2ª vez sem mudanças) |
 
 ## Fora de Escopo
 

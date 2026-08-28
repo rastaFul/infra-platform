@@ -105,6 +105,10 @@ Decisão: registrado como item CRÍTICO na spec `features/security-hardening-pha
 Contexto: `PROJECT.md` tinha conteúdo de outro projeto (Clock of Clocks) parado lá por acidente de sessão — nunca foi sobre o infra-platform de fato. `ROADMAP.md` nunca existiu.
 Decisão: `PROJECT.md` reescrito (visão, objetivos, produtos servidos, stack, repos). `ROADMAP.md` criado do zero, consolidando Fase 0 (DONE) até Fase 2+ (AWS), incluindo as novas frentes de segurança e ambiente de dev.
 
+## D-2026-08-27-20: dev-environment-ansible — sem legado, começa do zero
+Contexto: perguntei se havia repo Vagrant pessoal existente antes de detalhar tasks (D1 da spec). Usuário confirmou: só existe na empresa (fora de escopo/acesso), nada pessoal ainda.
+Decisão: spec `dev-environment-ansible` promovida de DRAFT pra APPROVED — D1 e D3 resolvidos (sem legado, sem migração gradual, Ansible desde o início). Tasks detalhadas escritas (7 tasks: repo, roles dotfiles/packages/agents-harness/credentials-check, README, teste de idempotência). Falta só D2 (repo público ou privado) — assumindo privado por padrão até confirmação, não vou criar público sem sinal explícito.
+
 ## D-2026-08-27-4: vault-init.sh adiado para Batch 3
 Contexto: com Docker Desktop de volta, `docker compose up` do platform stack (Vault + OTEL Collector) rodou limpo e `vault status` respondeu (uninitialized, sealed — esperado). O script `vault-init.sh` de fato inicializa o Vault, gerando root token + unseal keys (ação sensível, sem rollback trivial).
 Decisão: não executar vault-init.sh como parte do fechamento de gate do Batch 1. Fica como primeira tarefa formal do Batch 3, com spec própria cobrindo AppRole por projeto. Containers vault/otel-collector deixados rodando (isolados, portas só 127.0.0.1) — não há motivo pra derrubar.
