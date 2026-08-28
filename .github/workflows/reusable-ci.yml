@@ -52,10 +52,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No explicit `version:` here on purpose — pnpm/action-setup errors
+      # ("Multiple versions of pnpm specified") if both this input AND a
+      # `packageManager` field in package.json are set (found running this
+      # for real 2026-08-28 against artists-booking, which pins
+      # "packageManager": "pnpm@9.15.9"). Every pnpm-based repo using this
+      # workflow MUST have `packageManager` set in its package.json — that
+      # becomes the single source of truth for the pinned version (see
+      # docs/reference/docker-build-conventions.md — same "never @latest"
+      # rule applies here).
       - uses: pnpm/action-setup@v4
         if: inputs.package-manager == 'pnpm'
-        with:
-          version: ${{ inputs.pnpm-version }}
 
       - uses: actions/setup-node@v4
         with:
@@ -112,7 +119,10 @@ jobs:
           docker build -f "${{ inputs.dockerfile }}" -t ci-build:${{ github.sha }} "${{ inputs.docker-context }}"
 
       - name: Trivy scan (fails on CRITICAL)
-        uses: aquasecurity/trivy-action@0.24.0
+        # Pinned by commit SHA, not a mutable tag — trivy-action had a
+        # documented supply-chain compromise (tags hijacked to steal
+        # CI/CD secrets, March 2026). SHA = tag v0.36.0 as of 2026-08-28.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: "ci-build:${{ github.sha }}"
           severity: "CRITICAL"
