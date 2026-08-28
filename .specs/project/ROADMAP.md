@@ -38,7 +38,7 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 ## Segurança Profissional — Fase 1 — DONE (2026-08-28)
 
 - [x] `features/security-hardening-phase1/spec.md` — JWT fail-fast, CORS exact-match, `/metrics` token auth, CI gates (npm audit + trivy), Vault init + AppRole por projeto — todas as 5 tasks executadas, 6 bugs reais achados e corrigidos no processo (vault-init.sh x2, reusable CI workflow x3, colisão de sessão paralela x1)
-- [ ] `features/security-audit-auth-session/spec.md` — auditoria de sessão/senha/cookie por produto (ainda não iniciada)
+- [x] `features/security-audit-auth-session/spec.md` — investigação concluída. rastafinancas: maduro (rate limit por rota, secure condicional, bcrypt 12). artists-booking: 2 gaps (sem rate limit em auth — HIGH; cookie sem `secure` — MEDIUM; bcrypt 10 — LOW). microgrow/vetcare: sem superfície de auth custom relevante. Correções ainda não aplicadas (aguardando aprovação, spec própria)
 - [ ] `features/backup-strategy/spec.md` — backup de SQLite/Postgres/InfluxDB (pain point aberto desde a spec original de 12/08, nunca resolvido)
 - [ ] Débito de código achado pelo CI novo (fora do escopo de infra, backlog do produto): CVE crítico `tar@7.5.11` + erros `tsc` em artists-booking
 

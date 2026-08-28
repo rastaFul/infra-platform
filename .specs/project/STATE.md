@@ -75,6 +75,11 @@ Usuário questionou a duplicação que eu tinha deixado passar. Auditoria confir
 - Falta só D2 (repo público/privado) antes de eu criar o repo `dev-environment` de fato.
 - `security-hardening-phase1` continua aguardando aprovação explícita (não confundir com a aprovação desta frente diferente).
 
+## Sessão 2026-08-28 (continuação) — smoke test + security-audit-auth-session
+- Smoke test pré-execução (pedido pelo usuário): Playwright MCP indisponível nesta sessão (server conectado no CLI mas tools não expostas ao agente) — substituído por checagem HTTP real. 6/6 domínios públicos respondendo normal (307/302), 10/10 PM2 online, 3 APIs tocados hoje com `/health` 200, proxy CORS funcionando ponta a ponta. Nada quebrado.
+- `security-audit-auth-session`: investigação completa (sub-agentes indisponíveis, feito direto). Achados: artists-booking sem rate limit em auth (HIGH) + cookie sem `secure` (MEDIUM) + bcrypt 10 rounds (LOW). rastafinancas maduro, sem achados. microgrow/vetcare sem superfície de auth custom relevante. Nenhuma correção aplicada — aguardando aprovação (Done Criteria da própria spec pede isso). Ver D-2026-08-28-4.
+- Próxima ação: usuário decidir se aprova correção dos achados de artists-booking, ou segue pra `backup-strategy`.
+
 ## Sessão 2026-08-28 — security-hardening-phase1 EXECUTADA COMPLETA
 Usuário aprovou ("pode executar tudo"). Todas as 5 tasks feitas: JWT fail-fast (artists-booking, rastafinancas), CORS exact-match (artists-booking, microgrow), `/metrics` token auth (3 APIs + prometheus.yml + docker-compose + 3 ecosystem.config.js), CI reusable workflow (5 apps, 4 repos), Vault init completo (KV v2, AppRole, policies pros 4 projetos).
 **6 bugs reais achados e corrigidos** (nada disso tinha sido exercitado de verdade antes): 2x em `vault-init.sh` (curl -f contra endpoint que retorna não-2xx de propósito; volume com dono root em vez de vault), 3x no reusable CI workflow (tag trivy inexistente + pin por SHA por causa de compromisso de supply-chain documentado; conflito pnpm version vs packageManager; glob de cache errado que abortava o job), 1x colisão de sessão paralela em artists-booking (reaplicado, commitado rápido).
