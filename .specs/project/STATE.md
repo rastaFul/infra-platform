@@ -75,6 +75,12 @@ Usuário questionou a duplicação que eu tinha deixado passar. Auditoria confir
 - Falta só D2 (repo público/privado) antes de eu criar o repo `dev-environment` de fato.
 - `security-hardening-phase1` continua aguardando aprovação explícita (não confundir com a aprovação desta frente diferente).
 
+## Sessão 2026-08-28 — security-hardening-phase1 EXECUTADA COMPLETA
+Usuário aprovou ("pode executar tudo"). Todas as 5 tasks feitas: JWT fail-fast (artists-booking, rastafinancas), CORS exact-match (artists-booking, microgrow), `/metrics` token auth (3 APIs + prometheus.yml + docker-compose + 3 ecosystem.config.js), CI reusable workflow (5 apps, 4 repos), Vault init completo (KV v2, AppRole, policies pros 4 projetos).
+**6 bugs reais achados e corrigidos** (nada disso tinha sido exercitado de verdade antes): 2x em `vault-init.sh` (curl -f contra endpoint que retorna não-2xx de propósito; volume com dono root em vez de vault), 3x no reusable CI workflow (tag trivy inexistente + pin por SHA por causa de compromisso de supply-chain documentado; conflito pnpm version vs packageManager; glob de cache errado que abortava o job), 1x colisão de sessão paralela em artists-booking (reaplicado, commitado rápido).
+**2 achados reais de débito de produto** (não infra, CI pegou pela primeira vez): CVE crítico em `tar` (artists-booking), erros de tipo `tsc` (artists-booking) — registrados, não corrigidos (fora de escopo desta spec).
+Todos os 4 repos de produto + infra-platform commitados e pushed. Ver D-2026-08-28-{2,3} e spec `security-hardening-phase1/spec.md` (log de execução completo).
+
 ## Sessão 2026-08-27 (continuação 7) — dev-environment executado
 - D2 resolvida (privado). Repo `dev-environment` criado, 4 roles escritas, gates rodados (syntax-check + dry-run PASS, ansible-lint bloqueado por Python 3.8 da máquina). Ver D-2026-08-27-21.
 - Pendente: rodar de verdade (sem `--check`) — só dry-run até agora. Pendente também: pacotes (role `packages`) nunca testados de fato, precisa de sudo que esta sessão não tem.

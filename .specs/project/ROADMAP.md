@@ -35,11 +35,12 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 - [ ] Migração de segredos `.env` → Vault dynamic secrets
 - [ ] Promtail: logs PM2 → Docker socket
 
-## Segurança Profissional — Fase 1 — NOT STARTED (specs escritas 2026-08-27)
+## Segurança Profissional — Fase 1 — DONE (2026-08-28)
 
-- [ ] `features/security-hardening-phase1/spec.md` — Vault AppRole, CI gates (npm audit + trivy), CORS exact-match, `/metrics` auth, **fix crítico: fallback de JWT_SECRET hardcoded em 2 projetos**
-- [ ] `features/security-audit-auth-session/spec.md` — auditoria de sessão/senha/cookie por produto
+- [x] `features/security-hardening-phase1/spec.md` — JWT fail-fast, CORS exact-match, `/metrics` token auth, CI gates (npm audit + trivy), Vault init + AppRole por projeto — todas as 5 tasks executadas, 6 bugs reais achados e corrigidos no processo (vault-init.sh x2, reusable CI workflow x3, colisão de sessão paralela x1)
+- [ ] `features/security-audit-auth-session/spec.md` — auditoria de sessão/senha/cookie por produto (ainda não iniciada)
 - [ ] `features/backup-strategy/spec.md` — backup de SQLite/Postgres/InfluxDB (pain point aberto desde a spec original de 12/08, nunca resolvido)
+- [ ] Débito de código achado pelo CI novo (fora do escopo de infra, backlog do produto): CVE crítico `tar@7.5.11` + erros `tsc` em artists-booking
 
 ## Ambiente de Desenvolvimento — Fase 1 DONE (repo criado, dry-run validado)
 
