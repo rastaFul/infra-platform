@@ -59,7 +59,16 @@ Usuário questionou a duplicação que eu tinha deixado passar. Auditoria confir
 - [x] `~/services` deletado pelo usuário (confirmado)
 - [x] Volumes órfãos `infra_*`/`observability_*` removidos (confirmado pelo usuário)
 - [x] Agentes (`harness-infra`, `harness-dev`, `infra-analyzer`, `CLAUDE.md`) — descoberta de `.specs/` e `infra-platform` tornada operacional (algoritmo executável, não só prosa). Ver D-2026-08-27-16.
-- [ ] Pendente do usuário: `gh auth refresh -s delete_repo` + apagar `harness-specs` no GitHub (eu não tenho escopo)
+- [x] `gh auth refresh` + `harness-specs` — resolvido pelo usuário
+
+## Sessão 2026-08-27 (continuação 5) — Specs de Segurança + Dev Environment + PROJECT/ROADMAP
+- `PROJECT.md` corrigido (tinha conteúdo errado, Clock of Clocks) + `ROADMAP.md` criado (nunca existiu)
+- 4 specs novas em `features/`:
+  - `security-hardening-phase1/` — inclui achado CRÍTICO: JWT_SECRET fallback hardcoded em artists-booking + rastafinancas (D-2026-08-27-18). Aguardando aprovação, não corrigido ainda.
+  - `security-audit-auth-session/` — investigação (não execução) de hash/cookie/refresh-token por produto
+  - `backup-strategy/` — pain point aberto desde 12/08, nunca resolvido
+  - `dev-environment-ansible/` — Ansible em vez de Vagrant pro WSL2/Linux/Mac (D-2026-08-27-17), aguardando usuário mandar repo Vagrant existente
+- Próxima ação: usuário aprovar `security-hardening-phase1` (prioridade — tem achado crítico) e mandar conteúdo do repo Vagrant atual
 
 Ver D-2026-08-27-15 (DECISIONS.md) e ADRs 010, 011, 012 em `infra-platform/docs/explanation/adr/` pro detalhe completo.
 

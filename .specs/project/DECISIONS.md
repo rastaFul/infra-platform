@@ -93,6 +93,18 @@ Decisões executadas:
 Contexto: usuário confirmou limpeza (`~/services` deletado, volumes órfãos removidos) e pediu explicitamente que os agentes "saibam enxergar as infras independente do projeto" e ".specs deve ser no projeto que eu estiver trabalhando, pra evitar bagunça de novo".
 Decisão: `harness-infra.md`, `harness-dev.md`, `infra-analyzer.md` e `CLAUDE.md` (repo `agents-harness`) ganharam regra 0 executável: `.specs/` sempre = `git rev-parse --show-toplevel` do diretório atual; se não estiver dentro de um repo, PARA e pergunta qual projeto, nunca assume home/pasta pai. `infra-platform` deixou de ser path hardcoded (`~/projects/infra-platform/`) e passou a ser descoberto dinamicamente como diretório irmão do repo atual (`$(dirname $(git rev-parse --show-toplevel))/infra-platform`) — funciona independente de qual projeto ou máquina. Sincronizado em `~/.claude/` + commitado/pushed em `agents-harness` (`18cc191`).
 
+## D-2026-08-27-17: Ansible em vez de Vagrant pro ambiente de dev WSL2/Linux/Mac
+Contexto: usuário já versiona ambiente via git+Vagrant pra portar entre máquinas, perguntou o que fazer especificamente no WSL2 e se dá pra usar só Ansible.
+Decisão: sim — WSL2 já é uma VM (Hyper-V), rodar Vagrant dentro dele seria virtualização aninhada sem ganho (confirmado: nenhum provider instalado). Ansible cobre dotfiles+pacotes sem precisar de VM, roda idêntico em WSL2/Linux/Mac, e reaproveita depois pra configurar VMs reais (Oracle) — Terraform provisiona, Ansible configura, combinação padrão. Spec: `features/dev-environment-ansible/spec.md`. Pendente: usuário mandar o conteúdo do repo Vagrant existente antes de detalhar tasks.
+
+## D-2026-08-27-18: achado crítico — JWT_SECRET com fallback hardcoded (2 produtos)
+Contexto: auditoria rápida de CORS (pedida pelo usuário como item barato da lista de segurança) encontrou `rastafinancas/apps/api/src/server.ts:30` e `artists-booking/apps/api/src/infrastructure/services/jwt.service.ts:15-16` com fallback de secret JWT hardcoded no código-fonte (`'dev-secret-change-in-production-32chars!!'`, `'dev-secret'`). `.env` real de produção tem valor setado (não é exploração ativa hoje), mas é uma bomba-relógio — qualquer deploy futuro sem a env var sobe silenciosamente com segredo público/previsível.
+Decisão: registrado como item CRÍTICO na spec `features/security-hardening-phase1/spec.md`, task 1 (fail-fast no boot se a env var real não estiver setada em produção). NÃO corrigido ainda — spec aguarda aprovação antes de execução (toca código de auth de 2 produtos).
+
+## D-2026-08-27-19: PROJECT.md e ROADMAP.md corrigidos/criados
+Contexto: `PROJECT.md` tinha conteúdo de outro projeto (Clock of Clocks) parado lá por acidente de sessão — nunca foi sobre o infra-platform de fato. `ROADMAP.md` nunca existiu.
+Decisão: `PROJECT.md` reescrito (visão, objetivos, produtos servidos, stack, repos). `ROADMAP.md` criado do zero, consolidando Fase 0 (DONE) até Fase 2+ (AWS), incluindo as novas frentes de segurança e ambiente de dev.
+
 ## D-2026-08-27-4: vault-init.sh adiado para Batch 3
 Contexto: com Docker Desktop de volta, `docker compose up` do platform stack (Vault + OTEL Collector) rodou limpo e `vault status` respondeu (uninitialized, sealed — esperado). O script `vault-init.sh` de fato inicializa o Vault, gerando root token + unseal keys (ação sensível, sem rollback trivial).
 Decisão: não executar vault-init.sh como parte do fechamento de gate do Batch 1. Fica como primeira tarefa formal do Batch 3, com spec própria cobrindo AppRole por projeto. Containers vault/otel-collector deixados rodando (isolados, portas só 127.0.0.1) — não há motivo pra derrubar.
