@@ -1,8 +1,17 @@
 .env
 *.env.local
 .vault-init-*
-terraform/.terraform/
-terraform/*.tfstate
-terraform/*.tfstate.backup
-**/.terraform.lock.hcl
+
+# Terraform — recursive patterns (fixed 2026-08-28: original patterns only
+# matched a flat terraform/ layout, silently failed to ignore
+# terraform/environments/oci-free/.terraform/ under the new per-environment
+# directory structure — .terraform/ almost got committed, ~100MB+ of
+# provider binaries).
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.backup
+**/terraform.tfvars
+# .terraform.lock.hcl is NOT ignored — it's meant to be committed (pins
+# provider versions, same spirit as package-lock.json)
+
 platform/prometheus/metrics_token
