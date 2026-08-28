@@ -29,10 +29,10 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 - [ ] Grafana dashboards golden signals (artists/rasta/vetcare — microgrow já tem)
 - Ver ADR 006, 009
 
-## Batch 3 — Vault real + migração completa — NOT STARTED
+## Batch 3 — Vault real + migração completa — parcial DONE
 
-- [ ] `vault-init.sh` (unseal, AppRole por projeto) — ver D-2026-08-27-4
-- [ ] Migração de segredos `.env` → Vault dynamic secrets
+- [x] `vault-init.sh` (unseal, AppRole por projeto) — feito 2026-08-27, ver D-2026-08-27-4/D-2026-08-28-3
+- [x] Migração de segredos `.env` → Vault (KV v2) — feito 2026-08-28. Não é "dynamic secrets" de verdade (short-lived), é Vault-como-fonte-canônica + sync pro `.env` — decisão deliberada pra essa escala. Ver `docs/how-to/vault-secrets-workflow.md` e D-2026-08-28-7
 - [ ] Promtail: logs PM2 → Docker socket
 
 ## Segurança Profissional — Fase 1 — DONE (2026-08-28)
