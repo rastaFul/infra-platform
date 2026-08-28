@@ -89,6 +89,10 @@ Decisões executadas:
 - **Pendência do usuário**: `gh auth refresh -h github.com -s delete_repo` + `gh repo delete rastaFul/harness-specs --yes` (token sem escopo pra eu deletar sozinho).
 - **Pendência de decisão**: apagar volumes Docker órfãos `infra_*` (41MB influx, 1.2MB grafana, 1.6MB loki) e `observability_*` (79MB glitchtip-db, 284KB loki)? Confirmados sem nenhuma referência em compose files atuais.
 
+## D-2026-08-27-16: descoberta de infra tornada operacional nos agentes (não só documentada)
+Contexto: usuário confirmou limpeza (`~/services` deletado, volumes órfãos removidos) e pediu explicitamente que os agentes "saibam enxergar as infras independente do projeto" e ".specs deve ser no projeto que eu estiver trabalhando, pra evitar bagunça de novo".
+Decisão: `harness-infra.md`, `harness-dev.md`, `infra-analyzer.md` e `CLAUDE.md` (repo `agents-harness`) ganharam regra 0 executável: `.specs/` sempre = `git rev-parse --show-toplevel` do diretório atual; se não estiver dentro de um repo, PARA e pergunta qual projeto, nunca assume home/pasta pai. `infra-platform` deixou de ser path hardcoded (`~/projects/infra-platform/`) e passou a ser descoberto dinamicamente como diretório irmão do repo atual (`$(dirname $(git rev-parse --show-toplevel))/infra-platform`) — funciona independente de qual projeto ou máquina. Sincronizado em `~/.claude/` + commitado/pushed em `agents-harness` (`18cc191`).
+
 ## D-2026-08-27-4: vault-init.sh adiado para Batch 3
 Contexto: com Docker Desktop de volta, `docker compose up` do platform stack (Vault + OTEL Collector) rodou limpo e `vault status` respondeu (uninitialized, sealed — esperado). O script `vault-init.sh` de fato inicializa o Vault, gerando root token + unseal keys (ação sensível, sem rollback trivial).
 Decisão: não executar vault-init.sh como parte do fechamento de gate do Batch 1. Fica como primeira tarefa formal do Batch 3, com spec própria cobrindo AppRole por projeto. Containers vault/otel-collector deixados rodando (isolados, portas só 127.0.0.1) — não há motivo pra derrubar.

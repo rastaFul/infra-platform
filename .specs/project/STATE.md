@@ -56,8 +56,10 @@ Usuário questionou a duplicação que eu tinha deixado passar. Auditoria confir
 - [x] Redistribuir `.specs` pros repos certos + reverter `harness-specs` (ADR-012)
 - [x] `~/projects/services/` removido (vazio após migrações)
 - [x] Bug de produção achado e corrigido: `artists.rastaful.dev` 500 (pnpm store corrompido, não relacionado à infra)
-- [ ] Pendente do usuário: `gh auth refresh -s delete_repo` + apagar `harness-specs` no GitHub
-- [ ] Pendente decisão: apagar volumes órfãos `infra_*`/`observability_*` (~120MB, sem referência em nenhum compose atual)
+- [x] `~/services` deletado pelo usuário (confirmado)
+- [x] Volumes órfãos `infra_*`/`observability_*` removidos (confirmado pelo usuário)
+- [x] Agentes (`harness-infra`, `harness-dev`, `infra-analyzer`, `CLAUDE.md`) — descoberta de `.specs/` e `infra-platform` tornada operacional (algoritmo executável, não só prosa). Ver D-2026-08-27-16.
+- [ ] Pendente do usuário: `gh auth refresh -s delete_repo` + apagar `harness-specs` no GitHub (eu não tenho escopo)
 
 Ver D-2026-08-27-15 (DECISIONS.md) e ADRs 010, 011, 012 em `infra-platform/docs/explanation/adr/` pro detalhe completo.
 
