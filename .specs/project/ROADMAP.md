@@ -21,12 +21,12 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 - [ ] Migração PM2 → Docker Compose (1 serviço por vez)
 - Ver ADR 005, 007, 008 | Spec: `docs/how-to/provision-oracle-free-tier.md` (DRAFT)
 
-## Batch 2 — CI/CD por projeto — NOT STARTED
+## Batch 2 — CI/CD por projeto — quase tudo DONE
 
-- [ ] Per-project `docker-compose.yml` com redes isoladas
-- [ ] GitHub Actions CI (reusable workflow, 5 repos) — lint, test, `tsc`, `docker build`
-- [ ] Coolify CD (só em merge `main`, só quando `oci-free` existir)
-- [ ] Grafana dashboards golden signals (artists/rasta/vetcare — microgrow já tem)
+- [x] Per-project `docker-compose.yml` com redes isoladas — **já estava adequado**, verificado 2026-08-28: `artists_net` explícita, `microgrow` tem a sua, rastafinancas não precisa (SQLite, sem serviço extra), vetcare usa rede default do Compose (isolada na prática, só não segue a convenção de nome explícito `<project>_net` — achado LOW, cosmético)
+- [x] GitHub Actions CI (reusable workflow, 4 repos) — feito 2026-08-28 (`security-hardening-phase1`, Task 3)
+- [ ] Coolify CD (só em merge `main`, só quando `oci-free` existir) — bloqueado até Oracle
+- [x] Grafana dashboards golden signals — **achado 2026-08-28**: `golden-signals.json` (criado no Batch 1, órfão até o Prometheus existir) já cobre artists-booking e rastafinancas via variável `$service`, confirmado com dado real fluindo. microgrow já tinha os próprios. **vetcare é o único sem `/metrics`** — spec delegada pro harness-dev (`vetcare/.specs/features/observability-metrics/spec.md`)
 - Ver ADR 006, 009
 
 ## Batch 3 — Vault real + migração completa — parcial DONE
