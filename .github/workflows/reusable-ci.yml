@@ -1,0 +1,120 @@
+name: Reusable CI (lint, test, tsc, npm audit, docker build, trivy)
+
+# Called by each app repo's own .github/workflows/ci.yml via workflow_call.
+# Pure validation — never touches infrastructure, never deploys. See
+# infra-platform ADR 006 (CI/CD split) and .specs/features/
+# security-hardening-phase1/spec.md (Task 3).
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        description: "Path to the app (e.g. apps/api) — for monorepos"
+        required: false
+        type: string
+        default: "."
+      package-manager:
+        description: "npm | pnpm"
+        required: false
+        type: string
+        default: "npm"
+      pnpm-version:
+        description: "Pinned pnpm version — never @latest, see docker-build-conventions.md"
+        required: false
+        type: string
+        default: "9"
+      node-version:
+        required: false
+        type: string
+        default: "22"
+      dockerfile:
+        description: "Path to the Dockerfile to build+scan (relative to repo root). Empty = skip docker build/trivy."
+        required: false
+        type: string
+        default: ""
+      docker-context:
+        description: "Docker build context (relative to repo root — usually monorepo root, not the app dir, see docker-build-conventions.md)"
+        required: false
+        type: string
+        default: "."
+      audit-level:
+        description: "npm audit --audit-level threshold. Set to 'none' to only report, never fail the build."
+        required: false
+        type: string
+        default: "high"
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        if: inputs.package-manager == 'pnpm'
+        with:
+          version: ${{ inputs.pnpm-version }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: ${{ inputs.package-manager }}
+          cache-dependency-path: ${{ inputs.working-directory }}/*.lock*
+
+      - name: Install dependencies
+        run: |
+          if [ "${{ inputs.package-manager }}" = "pnpm" ]; then
+            pnpm install --frozen-lockfile
+          else
+            npm ci
+          fi
+
+      - name: Lint (if script exists)
+        run: |
+          if npm run | grep -q "^  lint$"; then
+            npm run lint
+          else
+            echo "No lint script — skipping"
+          fi
+
+      - name: TypeScript check (if tsconfig exists)
+        run: |
+          if [ -f tsconfig.json ]; then
+            npx tsc --noEmit
+          else
+            echo "No tsconfig.json — skipping"
+          fi
+
+      - name: Test (if script exists)
+        run: |
+          if npm run | grep -q "^  test$"; then
+            npm test
+          else
+            echo "No test script — skipping"
+          fi
+
+      - name: npm audit
+        run: |
+          npm audit --audit-level=${{ inputs.audit-level == 'none' && 'critical' || inputs.audit-level }} || \
+            ( [ "${{ inputs.audit-level }}" = "none" ] && echo "::warning::npm audit found issues (audit-level=none, not failing the build — see security-audit-auth-session spec to close this gap)" ) || \
+            exit 1
+
+  docker-build-scan:
+    if: inputs.dockerfile != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image (validates the Dockerfile — never pushed here, see ADR 006, CD is Coolify's job)
+        run: |
+          docker build -f "${{ inputs.dockerfile }}" -t ci-build:${{ github.sha }} "${{ inputs.docker-context }}"
+
+      - name: Trivy scan (fails on CRITICAL)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: "ci-build:${{ github.sha }}"
+          severity: "CRITICAL"
+          exit-code: "1"
+          ignore-unfixed: true

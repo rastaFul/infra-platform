@@ -36,8 +36,14 @@ vault_cmd() {
 wait_for_vault() {
   log "Waiting for Vault at ${VAULT_ADDR} ..."
   local attempts=0
-  until curl -sf "${VAULT_ADDR}/v1/sys/health" >/dev/null 2>&1 || \
-        curl -sf "${VAULT_ADDR}/v1/sys/health" 2>/dev/null | grep -q '"initialized"'; do
+  # NOTE: no `-f` here on purpose. Vault's /v1/sys/health intentionally
+  # returns non-2xx codes for valid states (501 not initialized, 503
+  # sealed, 429 standby) — `curl -f` treats those as failures and never
+  # sees the body, so this loop always timed out even when Vault was
+  # perfectly reachable (found running this for real 2026-08-28). We only
+  # care that curl got *a* JSON response with an "initialized" key, not
+  # the HTTP status code.
+  until curl -s "${VAULT_ADDR}/v1/sys/health" 2>/dev/null | grep -q '"initialized"'; do
     sleep 2
     attempts=$((attempts + 1))
     [ $attempts -ge 30 ] && die "Vault did not become reachable after 60s. Is it running?"
@@ -48,7 +54,7 @@ wait_for_vault() {
 # ── Initialize Vault (once) ──────────────────────────────────────────────────
 init_vault() {
   local init_status
-  init_status=$(curl -sf "${VAULT_ADDR}/v1/sys/health" | python3 -c \
+  init_status=$( curl -s "${VAULT_ADDR}/v1/sys/health" | python3 -c \
     "import sys,json; d=json.load(sys.stdin); print(str(d['initialized']).lower())" 2>/dev/null || echo "false")
 
   if [ "${init_status}" = "true" ]; then
@@ -70,7 +76,7 @@ init_vault() {
 # ── Unseal Vault ─────────────────────────────────────────────────────────────
 unseal_vault() {
   local sealed
-  sealed=$(curl -sf "${VAULT_ADDR}/v1/sys/health" | python3 -c \
+  sealed=$( curl -s "${VAULT_ADDR}/v1/sys/health" | python3 -c \
     "import sys,json; d=json.load(sys.stdin); print(str(d['sealed']).lower())" 2>/dev/null || echo "true")
 
   if [ "${sealed}" = "false" ]; then
