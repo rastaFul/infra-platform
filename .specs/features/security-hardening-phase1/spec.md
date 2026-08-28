@@ -1,7 +1,8 @@
 # SPEC: Security Hardening — Fase 1
 
-## Status: DRAFT (aguardando aprovação)
+## Status: IN_PROGRESS — Tasks 1, 2, 4 DONE (2026-08-28). Task 3 (CI gates) e Task 5 (vault-init.sh) em andamento.
 ## Created: 2026-08-27
+## Updated: 2026-08-28 — usuário aprovou execução ("pode executar tudo")
 ## Owner: rodrigo
 
 ---
@@ -51,11 +52,18 @@ Self-hosted, saudável, mas nunca inicializado (`vault-init.sh` adiado, D-2026-0
 | 4 | Proteger `/metrics` | infra-platform (prometheus.yml) + 3 APIs | Baixo-Médio — decidir mecanismo antes |
 | 5 | `vault-init.sh` | infra-platform | Médio — gera root token/unseal keys, ação sensível |
 
-## Decisões Necessárias (antes de executar)
+## Decisões (resolvidas na execução, 2026-08-28)
 
-- [ ] D1: mecanismo de proteção do `/metrics` — token compartilhado simples, ou esperar rede isolada do Oracle resolver isso via firewall/security list?
-- [ ] D2: `vault-init.sh` roda nesta spec ou fica só como pré-requisito documentado, execução em spec própria (Batch 3)?
-- [ ] D3: escopo do `npm audit` — `--audit-level=high` bloqueia o merge, ou só reporta (warning) no primeiro momento pra não travar tudo com débito já existente?
+- [x] D1: token compartilhado (`METRICS_TOKEN`, `Authorization: Bearer`) — Prometheus usa `authorization.credentials_file` (padrão nativo, arquivo gitignored `platform/prometheus/metrics_token`), não header customizado (Prometheus não manda headers arbitrários).
+- [ ] D2: `vault-init.sh` — em andamento nesta mesma execução (usuário aprovou "tudo").
+- [ ] D3: `npm audit` — a decidir quando Task 3 (CI) for implementada.
+
+## Log de Execução (2026-08-28)
+
+- **Task 1 (JWT fail-fast)**: aplicado em artists-booking e rastafinancas. `tsc --noEmit` PASS nos 2. Restart + health check PASS.
+- **Task 2 (CORS exact-match)**: aplicado em artists-booking e microgrow. `tsc --noEmit` PASS. Restart + health check PASS.
+- **Task 4 (`/metrics` token)**: implementado nos 3 APIs + `prometheus.yml` (`authorization.credentials_file`) + `docker-compose.yml` (mount do token) + `ecosystem.config.js` de cada projeto (forward explícito do `METRICS_TOKEN` — **achado no processo**: nenhum dos 3 confiava só em `.env`; rastafinancas e microgrow tinham allowlist/hardcode que NUNCA repassava o token pro processo real, só artists-api parecia funcionar por um mecanismo implícito do tsx nunca confirmado — resolvido tornando explícito nos 3, mais seguro que depender de comportamento não documentado). Gate final: 403 sem token, 200 com token, nos 3 APIs.
+- **Colisão real durante a execução**: outra sessão (Claude Code) estava trabalhando em paralelo no repo `artists-booking` (commits de auditoria visual/UI concorrentes) e sobrescreveu os 3 arquivos que eu tinha acabado de editar (`jwt.service.ts`, `app.ts`, `observability.plugin.ts`, `ecosystem.config.js`) antes de eu commitar. Detectado via nota automática do sistema ("changed on disk since you last read it") + confirmado com `git log`/`git diff`. Reaplicado e commitado imediatamente (`82fa0f8`) para reduzir a janela de colisão. rastafinancas e microgrow não foram afetados (sem sessão concorrente ali).
 
 ## Fora de Escopo (vira spec própria)
 

@@ -96,6 +96,7 @@ services:
     volumes:
       - prometheus_data:/prometheus
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/metrics_token:/etc/prometheus/metrics_token:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

@@ -18,7 +18,16 @@ scrape_configs:
 
   # Host-mapped services (PM2, not yet containerized) — reached via
   # host.docker.internal, same pattern already used by grafana/otel-collector.
+  #
+  # authorization/credentials_file: required since 2026-08-28 (security
+  # hardening — see infra-platform .specs/features/security-hardening-phase1).
+  # An IP allowlist alone does NOT work here: host.docker.internal traffic
+  # is NAT'd to look like 127.0.0.1 on WSL2/Docker Desktop, so any
+  # container on the host could otherwise read /metrics. The token file
+  # is gitignored, never committed — see prometheus/metrics_token.example.
   - job_name: apis-host
+    authorization:
+      credentials_file: /etc/prometheus/metrics_token
     static_configs:
       - targets: ['host.docker.internal:3001']
         labels: { service: rastafinancas-api }
