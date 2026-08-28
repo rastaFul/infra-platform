@@ -1,0 +1,31 @@
+apiVersion: 1
+providers:
+  - name: microgrow
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/microgrow
+      foldersFromFilesStructure: false
+    folder: MicroGrow
+
+  - name: rastafinancas
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/rastafinancas
+      foldersFromFilesStructure: false
+    folder: RastaFinancas
+
+  - name: platform
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/platform
+      foldersFromFilesStructure: false
+    folder: Platform

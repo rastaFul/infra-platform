@@ -1,0 +1,55 @@
+# ═══════════════════════════════════════════════════════════════════
+# Platform — Contact Points para Alertas
+#
+# COMO ADICIONAR CANAIS:
+#   Telegram: adicionar receiver com type: telegram
+#             settings: { bottoken: "...", chatid: "..." }
+#   Slack:    type: slack, settings: { url: "webhook_url" }
+#   Email:    type: email, settings: { addresses: "a@b.com" }
+#   PagerDuty: type: pagerduty, settings: { integrationKey: "..." }
+#
+# Cada contact point pode ter múltiplos receivers.
+# ═══════════════════════════════════════════════════════════════════
+
+apiVersion: 1
+deleteContactPoints: []
+
+contactPoints:
+  - orgId: 1
+    name: platform-critical
+    receivers:
+      - uid: critical-email
+        type: email
+        disableResolveMessage: false
+        settings:
+          addresses: "rodrigob.dev@gmail.com"
+          singleEmail: false
+          subject: "[Platform CRITICAL] {{ .GroupLabels.alertname }}"
+      # TODO: Telegram — descomentar quando tiver bot
+      # - uid: critical-telegram
+      #   type: telegram
+      #   settings:
+      #     bottoken: "${TELEGRAM_BOT_TOKEN}"
+      #     chatid: "${TELEGRAM_CHAT_ID}"
+
+  - orgId: 1
+    name: platform-warning
+    receivers:
+      - uid: warning-email
+        type: email
+        disableResolveMessage: true
+        settings:
+          addresses: "rodrigob.dev@gmail.com"
+          singleEmail: false
+          subject: "[Platform WARNING] {{ .GroupLabels.alertname }}"
+
+  - orgId: 1
+    name: platform-info
+    receivers:
+      - uid: info-email
+        type: email
+        disableResolveMessage: true
+        settings:
+          addresses: "rodrigob.dev@gmail.com"
+          singleEmail: true
+          subject: "[Platform INFO] {{ .GroupLabels.alertname }}"

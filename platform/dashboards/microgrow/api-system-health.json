@@ -1,0 +1,288 @@
+{
+  "__inputs": [],
+  "__elements": {},
+  "__requires": [],
+  "uid": "api-system-health",
+  "title": "MicroGrow — API & System Health",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "tags": ["microgrow", "api", "system"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Requisições/min",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "options": {
+        "tooltip": { "mode": "single", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 15
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"api_metrics\")\n  |> filter(fn: (r) => r._field == \"requests_total\")\n  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Latência avg + p95 (ms)",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "transparent", "value": null },
+              { "color": "red", "value": 1000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"api_metrics\")\n  |> filter(fn: (r) => contains(value: r._field, set: [\"avg_latency_ms\", \"p95_latency_ms\"]))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Erros 5xx (últimos 30min)",
+      "type": "stat",
+      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+      "gridPos": { "x": 0, "y": 8, "w": 4, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["sum"] },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red",    "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "query": "from(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"api_metrics\")\n  |> filter(fn: (r) => r._field == \"errors_5xx\")\n  |> sum()"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Clientes MQTT Conectados",
+      "type": "stat",
+      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+      "gridPos": { "x": 4, "y": 8, "w": 4, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "background",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "green",  "value": 2 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "query": "from(bucket: \"sensors\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"mqtt_broker\")\n  |> filter(fn: (r) => r.sys_topic == \"$SYS/broker/clients/connected\")\n  |> last()"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "MQTT Messages Processed/interval",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+      "gridPos": { "x": 8, "y": 8, "w": 16, "h": 8 },
+      "options": {
+        "tooltip": { "mode": "single", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"api_metrics\")\n  |> filter(fn: (r) => r._field == \"mqtt_messages_processed\")\n  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Broker MQTT — Messages/min",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "options": {
+        "tooltip": { "mode": "single", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_broker\")\n  |> filter(fn: (r) => r.sys_topic == \"$SYS/broker/messages/received\")\n  |> derivative(unit: 1m, nonNegative: true)"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "CPU % por Processo",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"process_metrics\")\n  |> filter(fn: (r) => r._field == \"cpu_usage\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Memória RSS MB por Processo",
+      "type": "timeseries",
+      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "min": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"process_metrics\")\n  |> filter(fn: (r) => r._field == \"memory_rss\")\n  |> map(fn: (r) => ({r with _value: r._value / 1048576.0}))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Erros Recentes da API",
+      "type": "logs",
+      "datasource": { "type": "loki", "uid": "loki-platform" },
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki-platform" },
+          "expr": "{service=\"microgrow-api\", level=\"error\"}",
+          "queryType": "range"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+apiVersion: 1
+datasources:
+  - uid: influxdb-microgrow
+    name: InfluxDB — MicroGrow
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    jsonData:
+      version: Flux
+      organization: platform
+      defaultBucket: sensors
+    secureJsonData:
+      token: ${INFLUXDB_TOKEN_MICROGROW}
+    isDefault: true
+
+  - uid: influxdb-rastafinancas
+    name: InfluxDB — RastaFinancas
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    jsonData:
+      version: Flux
+      organization: platform
+      defaultBucket: rastafinancas
+    secureJsonData:
+      token: ${INFLUXDB_TOKEN_RASTAFINANCAS}
+    isDefault: false
+
+  - uid: loki-platform
+    name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    jsonData:
+      maxLines: 1000
+
+  - uid: prometheus-platform
+    name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: false

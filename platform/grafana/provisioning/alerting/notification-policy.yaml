@@ -1,0 +1,21 @@
+apiVersion: 1
+policies:
+  - orgId: 1
+    receiver: platform-critical
+    group_by: [alertname, severity]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 1h
+    routes:
+      - receiver: platform-critical
+        matchers:
+          - severity = critical
+        repeat_interval: 30m
+      - receiver: platform-warning
+        matchers:
+          - severity = warning
+        repeat_interval: 4h
+      - receiver: platform-info
+        matchers:
+          - severity = info
+        repeat_interval: 24h

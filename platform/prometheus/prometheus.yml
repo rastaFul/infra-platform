@@ -1,0 +1,29 @@
+# Prometheus — Phase 0
+# Scrapes: OTEL Collector (app+collector metrics forwarded from OTEL SDK)
+#          + each API's own /metrics (prom-client), directly, since apps
+#          still run via PM2 on the host (Batch 3 will containerize them).
+# See infra-platform/docs/explanation/adr/009-caddy-deferred-prometheus-added.md
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: otel-collector
+    static_configs:
+      - targets: ['otel-collector:8889']
+      - targets: ['otel-collector:8888']
+        labels:
+          source: collector-self-metrics
+
+  # Host-mapped services (PM2, not yet containerized) — reached via
+  # host.docker.internal, same pattern already used by grafana/otel-collector.
+  - job_name: apis-host
+    static_configs:
+      - targets: ['host.docker.internal:3001']
+        labels: { service: rastafinancas-api }
+      - targets: ['host.docker.internal:3006']
+        labels: { service: artists-api }
+      - targets: ['host.docker.internal:4000']
+        labels: { service: microgrow-api }
+    metrics_path: /metrics

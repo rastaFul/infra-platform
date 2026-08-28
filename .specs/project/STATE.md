@@ -49,13 +49,17 @@ Usuário questionou a duplicação que eu tinha deixado passar. Auditoria confir
 - `artists-api`: investigado — health check direto (200), via proxy Next.js (200), via domínio público real `artists.rastaful.dev` (200). error.log só tem o incidente de 25/08 (prom-client, já corrigido). NÃO está quebrado agora — se o usuário viu quebrar, foi durante um dos 2 incidentes de PM2 frio de hoje (já corrigidos) ou é algo que precisa de mais detalhe pra reproduzir.
 - Padrão "só frontend público" JÁ EXISTE em artists-booking, rastafinancas, microgrow via `next.config.js` rewrites (proxy server-side `/api/*` → `localhost:PORT`) — backend nunca precisa de hostname público próprio. vetcare é monolito (não se aplica). MQTT do microgrow foi deliberadamente removido do tunnel (comentário em `mosquitto.conf` confirma).
 
-### Tasks desta frente
-- [ ] Remover clock-of-clocks (spec órfã, sem repo)
-- [ ] Consolidar `services/platform` (grafana/influxdb/loki/glitchtip) → `infra-platform/platform/docker-compose.yml` (volumes pinados por `name:` pra reusar `platform_*`, zero perda de dado)
-- [ ] Migrar `services/tunnel` → `infra-platform/`, corrigir PM2 pra novo path, documentar padrão BFF-proxy como ADR
-- [ ] Redistribuir `.specs`: `17-contractor-onboarding` → `artists-booking/.specs/`; `microgrow-full-test`/`startup-validation` → `microgrow/.specs/`; infra cross-repo → `infra-platform/.specs/`
-- [ ] Deletar repo `harness-specs` (decisão errada da sessão anterior)
-- [ ] Perguntar ao usuário antes de apagar volumes órfãos (`infra_*`, `observability_*`)
+### Tasks desta frente — TODAS CONCLUÍDAS
+- [x] Remover clock-of-clocks
+- [x] Consolidar platform stack (10 serviços num compose só, zero perda de dado, bug do healthcheck otel corrigido)
+- [x] Migrar tunnel + corrigir doc errada (ADR-007 citava config.yml errado) + documentar padrão BFF-proxy (ADR-011)
+- [x] Redistribuir `.specs` pros repos certos + reverter `harness-specs` (ADR-012)
+- [x] `~/projects/services/` removido (vazio após migrações)
+- [x] Bug de produção achado e corrigido: `artists.rastaful.dev` 500 (pnpm store corrompido, não relacionado à infra)
+- [ ] Pendente do usuário: `gh auth refresh -s delete_repo` + apagar `harness-specs` no GitHub
+- [ ] Pendente decisão: apagar volumes órfãos `infra_*`/`observability_*` (~120MB, sem referência em nenhum compose atual)
+
+Ver D-2026-08-27-15 (DECISIONS.md) e ADRs 010, 011, 012 em `infra-platform/docs/explanation/adr/` pro detalhe completo.
 
 ## Próxima ação (após desbloqueios 2-3): escrever módulo Terraform `oci-compute/` + `environments/oci-free/`
 

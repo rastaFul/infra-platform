@@ -1,0 +1,301 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: rastafinancas-p0-critical
+    folder: RastaFinancas Alerts
+    interval: 1m
+    rules:
+      - uid: rasta-api-down
+        title: "RastaFinancas API Offline"
+        condition: C
+        for: 3m
+        labels:
+          severity: critical
+          project: rastafinancas
+          component: api
+        annotations:
+          summary: "API não está respondendo há 3 minutos"
+          description: "Verificar: pm2 status rastafinancas-api | pm2 logs rastafinancas-api"
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: influxdb-rastafinancas
+            model:
+              type: flux
+              refId: A
+              query: |
+                from(bucket: "rastafinancas")
+                  |> range(start: -3m)
+                  |> filter(fn: (r) => r._measurement == "http_response")
+                  |> filter(fn: (r) => r.probe == "api-local")
+                  |> filter(fn: (r) => r._field == "result_code")
+                  |> last()
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              reducer: last
+              type: reduce
+
+      - uid: rasta-error-rate-critical
+        title: "RastaFinancas — Taxa de Erro 5xx > 1%"
+        condition: C
+        for: 5m
+        labels:
+          severity: critical
+          project: rastafinancas
+          component: api
+        annotations:
+          summary: "Taxa de erros 5xx acima de 1% nos últimos 5 minutos"
+          description: "Verificar: pm2 logs rastafinancas-api | Grafana → API Performance"
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: influxdb-rastafinancas
+            model:
+              type: flux
+              refId: A
+              query: |
+                errors = from(bucket: "rastafinancas")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "rasta_http_requests_total")
+                  |> filter(fn: (r) => r._field == "counter")
+                  |> filter(fn: (r) => r.status_code =~ /^5/)
+                  |> sum()
+
+                total = from(bucket: "rastafinancas")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "rasta_http_requests_total")
+                  |> filter(fn: (r) => r._field == "counter")
+                  |> sum()
+
+                join(tables: {errors: errors, total: total}, on: ["_stop"])
+                  |> map(fn: (r) => ({r with _value: if r._value_total > 0 then r._value_errors / r._value_total * 100.0 else 0.0}))
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [1.0]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              reducer: last
+              type: reduce
+
+  - orgId: 1
+    name: rastafinancas-p1-warning
+    folder: RastaFinancas Alerts
+    interval: 2m
+    rules:
+      - uid: rasta-latency-p95
+        title: "RastaFinancas — Latência p95 > 1s"
+        condition: C
+        for: 5m
+        labels:
+          severity: warning
+          project: rastafinancas
+          component: api
+        annotations:
+          summary: "p95 de latência acima de 1 segundo nos últimos 5 minutos"
+          description: "Verificar: Grafana → API Performance dashboard"
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: influxdb-rastafinancas
+            model:
+              type: flux
+              refId: A
+              query: |
+                from(bucket: "rastafinancas")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "rasta_http_request_duration_seconds")
+                  |> filter(fn: (r) => r._field == "sum")
+                  |> mean()
+                  |> map(fn: (r) => ({r with _value: r._value * 1000.0}))
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [1000]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              reducer: last
+              type: reduce
+
+      - uid: rasta-import-errors
+        title: "RastaFinancas — Falhas de Import > 3 em 15min"
+        condition: C
+        for: 0m
+        labels:
+          severity: warning
+          project: rastafinancas
+          component: extrato
+        annotations:
+          summary: "Mais de 3 falhas de importação de extrato em 15 minutos"
+          description: "Verificar: Grafana → Product Metrics | pm2 logs rastafinancas-api"
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: influxdb-rastafinancas
+            model:
+              type: flux
+              refId: A
+              query: |
+                from(bucket: "rastafinancas")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "rasta_import_transactions_total")
+                  |> filter(fn: (r) => r._field == "counter")
+                  |> count()
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [3]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              reducer: last
+              type: reduce
+
+      - uid: rasta-notif-job-down
+        title: "RastaFinancas — Notification Job sem execução > 2h"
+        condition: C
+        for: 2h
+        labels:
+          severity: warning
+          project: rastafinancas
+          component: jobs
+        annotations:
+          summary: "Nenhum notification job executado nas últimas 2 horas"
+          description: "Verificar: pm2 logs rastafinancas-api | cron job pode estar falhando silenciosamente"
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 7200
+              to: 0
+            datasourceUid: influxdb-rastafinancas
+            model:
+              type: flux
+              refId: A
+              query: |
+                from(bucket: "rastafinancas")
+                  |> range(start: -2h)
+                  |> filter(fn: (r) => r._measurement == "rasta_notification_job_runs_total")
+                  |> filter(fn: (r) => r._field == "counter")
+                  |> count()
+                  |> map(fn: (r) => ({r with _value: float(v: r._value)}))
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              reducer: last
+              type: reduce
+
+      - uid: rasta-web-down
+        title: "RastaFinancas Web Offline"
+        condition: C
+        for: 3m
+        labels:
+          severity: critical
+          project: rastafinancas
+          component: web
+        annotations:
+          summary: "Frontend web não está respondendo à probe pública"
+          description: "Verificar: pm2 status rastafinancas-web | CloudFlare tunnel status"
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: influxdb-rastafinancas
+            model:
+              type: flux
+              refId: A
+              query: |
+                from(bucket: "rastafinancas")
+                  |> range(start: -3m)
+                  |> filter(fn: (r) => r._measurement == "http_response")
+                  |> filter(fn: (r) => r.probe == "web-public")
+                  |> filter(fn: (r) => r._field == "result_code")
+                  |> last()
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              expression: A
+              refId: C
+              reducer: last
+              type: reduce

@@ -1,0 +1,17 @@
+tunnel: 4b4b58f0-7bcc-4d21-980d-1d853f661227
+credentials-file: /home/rodrigo/.cloudflared/4b4b58f0-7bcc-4d21-980d-1d853f661227.json
+
+ingress:
+  - hostname: vetcare.rastaful.dev
+    service: http://localhost:3004
+  - hostname: financas.rastaful.dev
+    service: http://localhost:3000
+  - hostname: grow.rastaful.dev
+    service: http://localhost:3002
+  - hostname: grow-sim.rastaful.dev
+    service: http://localhost:3003
+  - hostname: metrics.rastaful.dev
+    service: http://localhost:3010
+  - hostname: artists.rastaful.dev
+    service: http://localhost:3005
+  - service: http_status:404

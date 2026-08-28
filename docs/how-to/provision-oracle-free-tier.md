@@ -17,7 +17,7 @@ See ADR 005 (environment strategy), ADR 007 (why Oracle), ADR 008 (state backend
 2. `terraform/modules/oci-compute/` — VCN, subnet, security list (only 22/tcp from your IP + nothing else public — the VM has no public services, Cloudflare Tunnel handles ingress), Ampere A1 compute instance (2 OCPU / 12GB, ADR 007), boot volume, `cloud-init` user-data that installs Docker + Coolify non-interactively on first boot.
 3. `terraform plan -var-file=environments/oci-free/terraform.tfvars` — review before apply.
 4. `terraform apply` — provisions the VM, Coolify comes up automatically via cloud-init.
-5. Point `cloudflared` (currently running under PM2 on this WSL2 machine, see `~/.cloudflared/config.yml`) at the new VM — relocate the tunnel connector, not the DNS/domain (no DNS changes needed).
+5. Point `cloudflared` (PM2 process `platform-tunnel`, config now at `infra-platform/tunnel/cloudflared/config.yml` — see ADR 011, moved 2026-08-27 from `~/projects/services/tunnel/`) at the new VM — relocate the tunnel connector, not the DNS/domain (no DNS changes needed). Credentials file stays at `~/.cloudflared/<tunnel-id>.json` (not versioned).
 6. Configure Coolify: connect it to each app repo (GitHub), point it at the reusable CD workflow's published image (ADR 006).
 7. Deploy the shared platform stack (`infra-platform/platform/docker-compose.yml`) via Coolify — same file already validated locally (Batch 1 gate, 2026-08-27).
 8. Validate: `/health` on each app, Grafana reachable, Vault `status` healthy, Cloudflare Tunnel routing correctly.

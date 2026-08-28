@@ -1,0 +1,810 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: microgrow-p0-critical
+    folder: MicroGrow Alerts
+    interval: 1m
+    rules:
+      - uid: alert-soil-offline
+        title: "Solo Offline — Sem leituras > 5min"
+        condition: C
+        for: 5m
+        labels:
+          severity: critical
+          component: sensor
+        annotations:
+          summary: "Sensores de solo sem dados há mais de 5 minutos"
+          description: "Verificar conexão MQTT, simulador ou hardware ESP32"
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: influxdb-microgrow
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              type: flux
+              query: |
+                from(bucket: "sensors")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "soil_moisture")
+                  |> filter(fn: (r) => r._field == "vwc_pct")
+                  |> count()
+                  |> map(fn: (r) => ({r with _value: float(v: r._value)}))
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: C
+              type: reduce
+
+      - uid: alert-reservoir-critical
+        title: "Reservatório Crítico < 10%"
+        condition: C
+        for: 2m
+        labels:
+          severity: critical
+          component: reservoir
+        annotations:
+          summary: "Nível do reservatório abaixo de 10%"
+          description: "Reabastecer imediatamente para evitar falha de irrigação"
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: influxdb-microgrow
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              type: flux
+              query: |
+                from(bucket: "sensors")
+                  |> range(start: -2m)
+                  |> filter(fn: (r) => r._measurement == "reservoir")
+                  |> filter(fn: (r) => r._field == "level_pct")
+                  |> last()
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [10]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              hide: false
+              refId: C
+              reducer: last
+              type: reduce
+
+      - uid: alert-api-down
+        title: "API Offline — Sem métricas > 3min"
+        condition: C
+        for: 3m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "API não está publicando métricas"
+          description: "Verificar: pm2 status microgrow-api | pm2 logs microgrow-api"
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: influxdb-microgrow
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              type: flux
+              query: |
+                from(bucket: "sensors")
+                  |> range(start: -3m)
+                  |> filter(fn: (r) => r._measurement == "api_metrics")
+                  |> count()
+                  |> map(fn: (r) => ({r with _value: float(v: r._value)}))
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              refId: C
+              reducer: last
+              type: reduce
+
+  - orgId: 1
+    name: microgrow-p1-warning
+    folder: MicroGrow Alerts
+    interval: 2m
+    rules:
+      - uid: alert-reservoir-low
+        title: "Reservatório Baixo < 25%"
+        condition: C
+        for: 5m
+        labels:
+          severity: warning
+          component: reservoir
+        annotations:
+          summary: "Nível do reservatório abaixo de 25%"
+          description: "Planejar reabastecimento em breve"
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: influxdb-microgrow
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              type: flux
+              query: |
+                from(bucket: "sensors")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "reservoir")
+                  |> filter(fn: (r) => r._field == "level_pct")
+                  |> last()
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [25]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              refId: C
+              reducer: last
+              type: reduce
+
+      - uid: alert-vwc-critical
+        title: "VWC Crítico — Solo < 20%"
+        condition: C
+        for: 10m
+        labels:
+          severity: warning
+          component: sensor
+        annotations:
+          summary: "VWC médio abaixo de 20% por mais de 10 minutos"
+          description: "Planta em estresse hídrico. Verificar sistema de irrigação e reservatório."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: influxdb-microgrow
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              type: flux
+              query: |
+                from(bucket: "sensors")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r._measurement == "soil_moisture")
+                  |> filter(fn: (r) => r._field == "vwc_pct")
+                  |> mean()
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [20]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              refId: C
+              reducer: last
+              type: reduce
+
+      - uid: alert-mqtt-broker-down
+        title: "Broker MQTT sem clientes"
+        condition: C
+        for: 3m
+        labels:
+          severity: warning
+          component: mqtt
+        annotations:
+          summary: "Mosquitto sem clientes conectados há 3 minutos"
+          description: "Verificar container mosquitto: docker ps | docker logs microgrow-mosquitto"
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: influxdb-microgrow
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              type: flux
+              query: |
+                from(bucket: "sensors")
+                  |> range(start: -3m)
+                  |> filter(fn: (r) => r._measurement == "mqtt_broker")
+                  |> filter(fn: (r) => r.sys_topic == "$SYS/broker/clients/connected")
+                  |> last()
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              refId: C
+              reducer: last
+              type: reduce
+
+      - uid: alert-irrigation-blocked
+        title: "Irrigação Bloqueada > 30min"
+        condition: C
+        for: 30m
+        labels:
+          severity: warning
+          component: irrigation
+        annotations:
+          summary: "Sistema quer irrigar mas reservatório vazio há > 30min"
+          description: "Score alto + decision=BLOCKED. Planta precisa de água."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            datasourceUid: influxdb-microgrow
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              type: flux
+              query: |
+                from(bucket: "sensors")
+                  |> range(start: -30m)
+                  |> filter(fn: (r) => r._measurement == "hydric_score")
+                  |> filter(fn: (r) => r._field == "score")
+                  |> filter(fn: (r) => r.decision == "BLOCKED")
+                  |> count()
+                  |> map(fn: (r) => ({r with _value: float(v: r._value)}))
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [5]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              refId: C
+              reducer: last
+              type: reduce
+
+      - uid: alert-api-latency
+        title: "API Latência Alta p95 > 1s"
+        condition: C
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "API com p95 de latência acima de 1 segundo"
+          description: "Investigar gargalos. Ver logs: pm2 logs microgrow-api"
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: influxdb-microgrow
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              type: flux
+              query: |
+                from(bucket: "sensors")
+                  |> range(start: -5m)
+                  |> filter(fn: (r) => r._measurement == "api_metrics")
+                  |> filter(fn: (r) => r._field == "p95_latency_ms")
+                  |> mean()
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [1000]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              refId: C
+              reducer: last
+              type: reduce
+
+  - orgId: 1
+    name: microgrow-p0-reservoir-sensor
+    folder: MicroGrow Alerts
+    interval: 2m
+    rules:
+      - uid: alert-reservoir-sensor-stuck
+        title: "Reservatório — Sensor Flat Line > 2h"
+        condition: C
+        for: 2h
+        labels:
+          severity: critical
+          component: reservoir
+        annotations:
+          summary: "Nível do reservatório não variou em 2h com bomba ativa"
+          description: "Verificar: cabo do sensor, posição do flutuador, entupimento."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 7200
+              to: 0
+            datasourceUid: influxdb-microgrow
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              type: flux
+              query: |
+                from(bucket: "sensors")
+                  |> range(start: -2h)
+                  |> filter(fn: (r) => r._measurement == "reservoir")
+                  |> filter(fn: (r) => r._field == "level_pct")
+                  |> stddev()
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [0.1]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: C
+              type: reduce
+
+      - uid: alert-reservoir-sensor-suspect
+        title: "Reservatório — Sensor Não Registrou Drenagem"
+        condition: C
+        for: 0m
+        labels:
+          severity: warning
+          component: reservoir
+        annotations:
+          summary: "Bomba rodou >10s mas nível não caiu (sensor_suspect=true)"
+          description: "Verificar posição do sensor, nível de água, conexões."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: influxdb-microgrow
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              type: flux
+              query: |
+                from(bucket: "sensors")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r._measurement == "reservoir_drain_event")
+                  |> filter(fn: (r) => r._field == "sensor_suspect")
+                  |> filter(fn: (r) => r._value == 1.0)
+                  |> count()
+                  |> map(fn: (r) => ({r with _value: float(v: r._value)}))
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: C
+              type: reduce
+
+  - orgId: 1
+    name: microgrow-p1-sensor-coverage
+    folder: MicroGrow Alerts
+    interval: 2m
+    rules:
+      - uid: alert-air-offline
+        title: "Sensores de Ar Offline > 10min"
+        condition: C
+        for: 10m
+        labels:
+          severity: critical
+          component: sensor
+        annotations:
+          summary: "Nenhuma leitura de sensores de ar nos últimos 10 minutos"
+          description: "Verificar: conexão MQTT, sensor DHT/BME de temperatura/umidade do ar."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: influxdb-microgrow
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              type: flux
+              query: |
+                from(bucket: "sensors")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r._measurement == "air_conditions")
+                  |> count()
+                  |> map(fn: (r) => ({r with _value: float(v: r._value)}))
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: C
+              type: reduce
+
+      - uid: alert-light-schedule-violation
+        title: "Ciclo de Luz Fora do Schedule > 15min"
+        condition: C
+        for: 15m
+        labels:
+          severity: warning
+          component: lights
+        annotations:
+          summary: "Estado das luzes diverge do photoperiod por mais de 15 minutos"
+          description: "Verificar: controlador de luz, relé, configuração de photoperiod na API."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: influxdb-microgrow
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              type: flux
+              query: |
+                from(bucket: "sensors")
+                  |> range(start: -15m)
+                  |> filter(fn: (r) => r._measurement == "lights_compliance")
+                  |> filter(fn: (r) => r._field == "compliant")
+                  |> filter(fn: (r) => r._value == 0.0)
+                  |> count()
+                  |> map(fn: (r) => ({r with _value: float(v: r._value)}))
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: C
+              type: reduce
+
+  - orgId: 1
+    name: microgrow-p2-automation
+    folder: MicroGrow Alerts
+    interval: 1m
+    rules:
+      - uid: alert-air-offline-automation
+        title: "Sensores de Ar Offline > 10min (automation)"
+        condition: C
+        for: 10m
+        labels:
+          severity: critical
+          team: microgrow
+        annotations:
+          summary: "Sensores de ar sem dados há mais de 10 minutos"
+          description: "Verificar SHT31 canopy e intake — cabo ou sensor com falha"
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: influxdb-microgrow
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              type: flux
+              query: |
+                from(bucket: "sensors")
+                  |> range(start: -10m)
+                  |> filter(fn: (r) => r._measurement == "air_conditions")
+                  |> count()
+                  |> map(fn: (r) => ({r with _value: float(v: r._value)}))
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: C
+              type: reduce
+
+      - uid: alert-irrigation-ineffective
+        title: "3 Irrigações Consecutivas Inefetivas"
+        condition: C
+        for: 0m
+        labels:
+          severity: critical
+          team: microgrow
+        annotations:
+          summary: "3 irrigações seguidas não subiram o VWC"
+          description: "Verificar: bomba, mangueiras, nível do reservatório, posição dos emissores"
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 86400
+              to: 0
+            datasourceUid: influxdb-microgrow
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              type: flux
+              query: |
+                from(bucket: "sensors")
+                  |> range(start: -24h)
+                  |> filter(fn: (r) => r._measurement == "irrigation_outcome" and r._field == "effective")
+                  |> tail(n: 3)
+                  |> filter(fn: (r) => r._value == false)
+                  |> count()
+                  |> map(fn: (r) => ({r with _value: float(v: r._value)}))
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [3]
+                    type: gte
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: C
+              type: reduce
+
+      - uid: alert-grow-cycle-stale
+        title: "Grow Cycle sem atualização há 7 dias"
+        condition: C
+        for: 0m
+        labels:
+          severity: info
+          team: microgrow
+        annotations:
+          summary: "Ciclo de cultivo não foi atualizado nos últimos 7 dias"
+          description: "Verifique se o estágio atual ainda está correto em Settings > Ciclo"
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 604800
+              to: 0
+            datasourceUid: influxdb-microgrow
+            model:
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+              type: flux
+              query: |
+                from(bucket: "sensors")
+                  |> range(start: -7d)
+                  |> filter(fn: (r) => r._measurement == "grow_cycle")
+                  |> count()
+                  |> map(fn: (r) => ({r with _value: float(v: r._value)}))
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              hide: false
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: C
+              type: reduce
