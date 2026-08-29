@@ -1,17 +1,47 @@
 tunnel: 4b4b58f0-7bcc-4d21-980d-1d853f661227
-credentials-file: /home/rodrigo/.cloudflared/4b4b58f0-7bcc-4d21-980d-1d853f661227.json
+# Containerized (see ../docker-compose.yml) — mounted at this path inside
+# the cloudflared container, not the host path anymore.
+credentials-file: /etc/cloudflared/creds.json
 
+# Containerized 2026-08-28 (migration off PM2, see infra-platform
+# .specs/features/local-boot-persistence/spec.md). All targets are
+# themselves Docker containers now, publishing to 127.0.0.1 on the host —
+# host.docker.internal (extra_hosts: host-gateway) is how this container
+# reaches them.
+#
+# IMPORTANT — host.docker.internal resolves dual-stack on this Docker
+# Desktop/WSL2 setup (IPv4 192.168.65.254 + a link-local IPv6).
+# cloudflared's Go origin dialer does not fall back IPv6->IPv4 the way
+# curl's Happy Eyeballs does, so every request failed with "Unable to
+# reach the origin service" even though the target was reachable the
+# whole time (verified with a debug container sharing cloudflared's exact
+# network namespace: curl -v showed instant "Network unreachable" on
+# IPv6). Known upstream issue: github.com/cloudflare/cloudflared/issues/811.
+# Fix: `sysctls: net.ipv6.conf.all.disable_ipv6=1` in ../docker-compose.yml
+# — verified in isolation (debug container, same sysctl) that this makes
+# host.docker.internal resolve IPv4-only ("IPv6: (none)"). Do NOT replace
+# the hostname below with a literal IP (e.g. 192.168.65.254) — that IP is
+# Docker Desktop's internal gateway, not guaranteed stable across
+# upgrades/reboots, and the whole point of this spec is boot resilience.
+# host.docker.internal is maintained by Docker itself on every container
+# start, so it's the durable choice as long as IPv6 stays disabled here.
+#
+# NOTE 2026-08-29: this tunnel is remotely-managed from the Cloudflare
+# Zero Trust dashboard (Networks > Tunnels > Public Hostname) — this
+# local ingress section is NOT what actually routes traffic today, the
+# dashboard's Service field is. Keep both in sync manually until/unless
+# the tunnel is converted to locally-managed. See D-2026-08-28-10.
 ingress:
   - hostname: vetcare.rastaful.dev
-    service: http://localhost:3004
+    service: http://host.docker.internal:3004
   - hostname: financas.rastaful.dev
-    service: http://localhost:3000
+    service: http://host.docker.internal:3000
   - hostname: grow.rastaful.dev
-    service: http://localhost:3002
+    service: http://host.docker.internal:3002
   - hostname: grow-sim.rastaful.dev
-    service: http://localhost:3003
+    service: http://host.docker.internal:3003
   - hostname: metrics.rastaful.dev
-    service: http://localhost:3010
+    service: http://host.docker.internal:3010
   - hostname: artists.rastaful.dev
-    service: http://localhost:3005
+    service: http://host.docker.internal:3005
   - service: http_status:404

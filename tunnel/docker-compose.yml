@@ -1,0 +1,37 @@
+# Cloudflare Tunnel — replaces PM2 (pm2.config.js) — see
+# .specs/features/local-boot-persistence/spec.md for the migration
+# rationale (PM2 doesn't survive WSL2 restarts without systemd).
+#
+# Ingress targets (cloudflared/config.yml) point at host.docker.internal
+# instead of localhost now that every backing service is itself a
+# container publishing to 127.0.0.1 on the host — same extra_hosts trick
+# already used by otel-collector/prometheus/grafana in platform/docker-compose.yml.
+#
+# Start: docker compose up -d
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2026.8.2
+    container_name: platform-tunnel
+    # Credentials file on the host is 0400, owned by rodrigo (uid 1000) —
+    # the image's default nonroot user can't read it. Run as the same uid
+    # so the existing host file permissions just work, no chmod needed.
+    user: "1000:1000"
+    command: tunnel --config /etc/cloudflared/config.yml run 4b4b58f0-7bcc-4d21-980d-1d853f661227
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - /home/rodrigo/.cloudflared/4b4b58f0-7bcc-4d21-980d-1d853f661227.json:/etc/cloudflared/creds.json:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # host.docker.internal resolves dual-stack (IPv4 192.168.65.254 +
+    # IPv6 fdc4:...) on Docker Desktop/WSL2. cloudflared's Go dialer
+    # doesn't fall back IPv6->IPv4 the way curl's Happy Eyeballs does --
+    # it just fails the whole request ("Unable to reach the origin
+    # service"). Confirmed via a debug container sharing this container's
+    # exact network namespace: curl -v showed "Network unreachable" on
+    # IPv6, instant success on IPv4. Known upstream issue, see
+    # github.com/cloudflare/cloudflared/issues/811. Disabling IPv6 here
+    # forces single-stack IPv4 resolution.
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+    restart: unless-stopped

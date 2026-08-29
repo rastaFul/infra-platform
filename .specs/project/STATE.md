@@ -2,7 +2,7 @@
 
 ## Session: Infra Strategy — Phase 0 Execution
 ## Status: EXECUTING
-## Last updated: 2026-08-25
+## Last updated: 2026-08-29
 
 ## Current Tasks (Batch 1 Parallel) — CLOSED
 
@@ -106,6 +106,9 @@ Todos os 4 repos de produto + infra-platform commitados e pushed. Ver D-2026-08-
 
 Ver D-2026-08-27-15 (DECISIONS.md) e ADRs 010, 011, 012 em `infra-platform/docs/explanation/adr/` pro detalhe completo.
 
+## Sessão 2026-08-28 (continuação 3) — local-boot-persistence: diagnóstico DRAFT
+Usuário reportou: apps locais não sobem sozinhos após restart do PC. Diagnóstico real feito (não assumido): WSL2 não roda systemd (`pm2 startup systemd` falha, `systemctl` offline), `wsl-boot.sh` só faz `pm2 resurrect` (não inicia cron nem Docker). Estado ao vivo confirmou o sintoma acontecendo agora: PM2 com 0 processos, cron parado, enquanto o platform stack Docker (10 containers, `restart: unless-stopped`) subiu sozinho assim que o Docker Desktop ficou de pé — prova de que Docker Compose já resolve isso, PM2 é a causa raiz. Spec `features/local-boot-persistence/spec.md` criada (DRAFT), 2 frentes propostas (mitigação rápida no `wsl-boot.sh` vs. fechar o Batch 3 já decidido em D4: migração PM2→Docker Compose). Aguardando D1/D2/D3 do usuário antes de executar.
+
 ## Próxima ação (após desbloqueios 2-3): escrever módulo Terraform `oci-compute/` + `environments/oci-free/`
 
 ## Incident — 2026-08-25 (found on session resume)
@@ -130,9 +133,9 @@ Ver D-2026-08-27-15 (DECISIONS.md) e ADRs 010, 011, 012 em `infra-platform/docs/
 - [x] Investigar artists-api restart loop — causa raiz encontrada e corrigida 2026-08-25 (era prom-client MODULE_NOT_FOUND, não @fastify/helmet — histórico antigo já resolvido, esse era novo, introduzido por health-metrics-otel batch)
 
 ### Batch 3 (validação + switch)
-- [ ] docker compose up platform (Vault + OTEL Collector)
-- [ ] vault-init.sh — AppRole por projeto
-- [ ] Migração PM2 → Docker Compose (1 serviço por vez)
+- [x] docker compose up platform (Vault + OTEL Collector)
+- [x] vault-init.sh — AppRole por projeto
+- [x] Migração PM2 → Docker Compose (1 serviço por vez) — 5/5 containerizados (rastafinancas, microgrow, vetcare, artists-booking, tunnel), 4/5 servindo saudáveis; tunnel BLOCKED externamente por config remota no dashboard Cloudflare (ação do usuário, D-2026-08-28-10)
 - [ ] Update Promtail: PM2 logs → Docker socket logs
 - [ ] Validação end-to-end: health checks + metrics + logs → Loki
 
@@ -164,3 +167,24 @@ Ver D-2026-08-27-15 (DECISIONS.md) e ADRs 010, 011, 012 em `infra-platform/docs/
 - artists-api tsconfig `noEmit: true` → nunca compilou via tsc, sempre rodou tsx
 - microgrow já tem padrão de rede correto (microgrow_net + platform_net) — reusar
 - Promtail atual lê /home/rodrigo/.pm2/logs → mudar para Docker socket na migração
+
+## Sessão 2026-08-28 (continuação 4) — local-boot-persistence: migração em execução
+Spec APPROVED (D1=migração real completa, D2=tudo de uma vez, D3=Docker Desktop já autoinicia). Ordem: rastafinancas -> microgrow -> vetcare -> artists-booking -> tunnel (por último).
+- rastafinancas: DONE. 3 bugs reais achados/corrigidos (npm workspace node_modules hoisting no api Dockerfile, healthcheck localhost->::1 vs Fastify IPv4-only, Next.js rewrites() resolvido em build-time não runtime). Ver execution.md.
+- microgrow: DONE. Achado extra: mosquitto/telegraf/promtail estavam parados há 5 dias, subidos como efeito colateral. Nenhum bug novo (fixes pré-aplicados por lição do rastafinancas).
+- vetcare: DONE (confirmado na sessão seguinte, ver abaixo).
+- artists-booking: DONE (confirmado na sessão seguinte, ver abaixo).
+- tunnel: containerizado, mas **BLOCKED externamente** — ver sessão seguinte.
+
+## Sessão 2026-08-28/29 (continuação 5) — retomada após notebook travar
+Notebook crashou no meio da migração do tunnel. Reconstruí o estado real (não assumido) via `git status`/`git diff` + verificação ao vivo: PM2 0/0 (D4 completo), 4/5 apps rodando saudáveis em Docker, `platform-tunnel` containerizado e `Up`.
+
+**Achado real ao validar com gate externo**: as 6 rotas públicas (vetcare/financas/grow/grow-sim/metrics/artists.rastaful.dev) estavam em **502 real**, não só teoricamente sujeitas a isso. Investigação completa (não suposição): tunnel é **remotely-managed** pelo dashboard Cloudflare Zero Trust — o `config.yml` local é ignorado pro roteamento, e o dashboard ainda aponta pro `localhost:PORT` de antes da containerização (funcionava quando cloudflared rodava via PM2 direto no host; não alcança nada de dentro do container). Tentei corrigir via API (token existente em `tunnel/.env`) — sem escopo de conta suficiente. Ver D-2026-08-28-10 pro achado completo + os 2 bugs reais extras corrigidos nessa investigação (PM2 dump órfão, vetcare healthcheck dependia do tunnel).
+
+**Status real agora**: 4/5 componentes (rastafinancas, microgrow, vetcare, artists-booking) 100% migrados, saudáveis, servindo local. `wsl-boot.sh` limpo (pm2 resurrect removido, cron adicionado). O único item pendente pra fechar esta spec é **1 ação manual do usuário no dashboard Cloudflare** (não automatizável com o token atual) — depois disso, re-testar as 6 URLs públicas e marcar a spec inteira como DONE.
+
+### Bloqueio RESOLVIDO — 2026-08-29
+Painel real: Networks → Tunnels → rastafinancas → **"Published application routes"** (não "Public Hostname"/"Hostname routes" como eu tinha suposto). Usuário editou as 6 rotas de `http://localhost:PORT` pra `http://host.docker.internal:PORT`. Validado com curl real: 6/6 sem 502. Spec `local-boot-persistence`: **DONE**.
+
+## Sessão 2026-08-29 — local-boot-persistence DONE, todos os 5 componentes migrados e validados
+6/6 rotas públicas confirmadas (curl real): vetcare/financas/grow/grow-sim/artists → 307, metrics → 302. Nenhum 502. `wsl-boot.sh` sem PM2 (só cron). PM2 instalado, sem processos.
