@@ -196,6 +196,11 @@ Próximo item do roadmap (Batch 3, Promtail PM2→Docker). Investigação real (
 - **vetcare/artists-booking**: nunca tiveram Promtail — não é regressão, é gap pré-existente, fora do escopo original deste item. Registrado como possível follow-up (D2 da spec).
 Spec criada em `features/observability-promtail-docker/spec.md`, aguardando D1 (restart dos containers do rastafinancas, confirmar que não foram parados de propósito)/D2 (escopo: só rasta+microgrow ou também vetcare/artists)/D3 (convenção de labels — recomendação: replicar o padrão do microgrow que já funciona).
 
+## Sessão 2026-08-29 (continuação 3) — Caddy prep (inativo) + vetcare_net
+Discussão K8s vs Compose (respondida via ADR-001 existente) e reverse proxy pro dia que o Cloudflare Tunnel sair do caminho (ADR-009 já previa revisitar isso, nunca escrito). Usuário pediu execução dos 2 itens sem bloqueio externo:
+- `ingress/caddy/` criado, não ativo, `caddy validate` PASS. Ver D-2026-08-29-2.
+- `vetcare_net` nomeada explicitamente (era `vetcare_default`, único dos 4 fora da convenção). Achado real: recriar rede de containers já rodando quebrou o port-relay do Docker Desktop/WSL2 — resolvido com `down`+`up` completo, validado local e público depois.
+
 ## Sessão 2026-08-29 (continuação 2) — observability-promtail-docker DONE
 Usuário aprovou D1/D2/D3 (restart+validar, escopo total, replicar padrão microgrow). Executado e validado com gate externo real (Loki query, não só "container Up"):
 - rastafinancas: telegraf 403 corrigido (token de segurança nunca propagado) + promtail migrado pra Docker discovery.

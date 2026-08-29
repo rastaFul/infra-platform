@@ -31,6 +31,18 @@ Investigating the Batch 1 output (`golden-signals.json` Grafana dashboard) surfa
 **Negative:**
 - Adds one more container (Prometheus) to the resource budget on the `oci-free` VM (ADR 007) — acceptable, Prometheus is lightweight relative to Grafana/Loki/InfluxDB already running.
 
+## Update — 2026-08-29
+Config prepared in advance, still NOT active: `ingress/caddy/` (Caddyfile +
+docker-compose.yml + README explaining exactly when/how to activate).
+Written because the "revisit" trigger above is a real question a
+developer coming from EC2/bash-managed infra will ask before touching a
+VM with a public IP — better answered with a validated config on the
+shelf than from scratch under pressure. `caddy validate` passes. Not
+referenced by `terraform/modules/oci-compute/cloud-init.yaml.tpl` or any
+active provisioning path — activation still requires the explicit steps
+in `ingress/caddy/README.md` (opening :80/:443, DNS change, etc).
+
 ## References
 - ADR 007 — Oracle Free Tier (resource budget context)
 - `docs/reference/observability-contract.md` — update once Prometheus scrape config lands
+- `ingress/caddy/` — prepared, inactive Caddy config for if/when this gets revisited

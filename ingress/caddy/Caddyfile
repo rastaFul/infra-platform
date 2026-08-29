@@ -1,0 +1,40 @@
+# PREPARED, NOT ACTIVE — see README.md in this directory and ADR-009.
+#
+# Only relevant if/when Cloudflare Tunnel is ever removed from the ingress
+# path (direct DNS -> VM public IP instead). Today (2026-08-29) that is
+# NOT the plan: multi-cloud-strategy.md keeps Cloudflare as the routing
+# layer through every phase (local -> oci-free -> aws-prod -> multi-cloud),
+# tunnel just relocates. This file exists so the answer to "what if we
+# ever need our own reverse proxy" is a tested config, not a blank page.
+#
+# Targets mirror tunnel/cloudflared/config.yml's ingress list exactly --
+# same hostnames, same ports (see docs/reference/network-topology.md's
+# port map) -- so activating this later means swapping the ingress
+# mechanism, not redesigning routing.
+#
+# Caddy gets automatic HTTPS (Let's Encrypt) for free -- no cert config
+# below is intentional, not an oversight.
+
+vetcare.rastaful.dev {
+	reverse_proxy localhost:3004
+}
+
+financas.rastaful.dev {
+	reverse_proxy localhost:3000
+}
+
+grow.rastaful.dev {
+	reverse_proxy localhost:3002
+}
+
+grow-sim.rastaful.dev {
+	reverse_proxy localhost:3003
+}
+
+metrics.rastaful.dev {
+	reverse_proxy localhost:3010
+}
+
+artists.rastaful.dev {
+	reverse_proxy localhost:3005
+}

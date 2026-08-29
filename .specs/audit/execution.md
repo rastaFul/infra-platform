@@ -83,6 +83,17 @@ Usuário confirmou pelo painel Cloudflare Zero Trust que a config de roteamento 
 **Spec `local-boot-persistence`: DONE.** Todos os 5 componentes (rastafinancas, microgrow, vetcare, artists-booking, platform-tunnel) migrados de PM2 pra Docker Compose com `restart: unless-stopped`, servindo local E publicamente. `wsl-boot.sh` limpo (sem PM2, com cron). PM2 fica instalado mas sem nenhum processo gerenciado.
 - Status: DONE
 
+## Task: Caddy prep + vetcare network naming — 2026-08-29
+
+Usuário pediu os 2 itens de "zero bloqueio externo" levantados na conversa (ADR-009 revisit + Batch 2 cosmético).
+
+**Caddy prep**: `ingress/caddy/` criado (Caddyfile + docker-compose.yml + README) — **não ativo**, zero referência de `terraform/modules/oci-compute/cloud-init.yaml.tpl` ou qualquer path de provisionamento real. Alvos espelham exatamente `tunnel/cloudflared/config.yml` (mesmos hostnames/portas). Gate real: `caddy validate` PASS. ADR-009 atualizada com nota + referência cruzada.
+
+**vetcare network naming**: `docker-compose.dev.yml` — rede default renomeada de `vetcare_default` (implícita) pra `vetcare_net` (convenção explícita, igual `microgrow_net`/`artists_net`/`rastafinancas_net`). Cosmético, sem mudança de isolamento real.
+- `docker compose config`: PASS antes de aplicar.
+- **Incidente real durante a aplicação** (não escondido): `docker compose up -d` sozinho deixou o relay de porta host→container quebrado pra `vetcare`/`postgres` (3004 e 5432 pararam de escutar no host, apesar do container reportar `healthy` e conectividade interna OK) — sintoma de troca de rede em containers já rodando no Docker Desktop/WSL2, não bug do meu compose. Resolvido com `docker compose down` completo + `up -d` (recria os containers do zero, não só troca de rede). Confirmado: `ss -tlnp` mostrando 3004/5432 escutando, `curl localhost:3004/api/health` 200, `curl https://vetcare.rastaful.dev` 307 (rota pública via tunnel também confirmada, não só local).
+- Status: DONE
+
 ## Task: observability-promtail-docker — D1/D2/D3 aprovados, execução completa — 2026-08-29
 
 Usuário aprovou: D1 (restartar e validar rastafinancas), D2 (escopo total — restaurar rastafinancas/microgrow E criar do zero pra vetcare/artists-booking), D3 (replicar o padrão `docker_sd_configs` do microgrow).

@@ -1,0 +1,28 @@
+# PREPARED, NOT ACTIVE — see README.md. Not referenced by
+# terraform/modules/oci-compute/cloud-init.yaml.tpl or any active
+# provisioning path. `docker compose up -d` here does nothing useful
+# until :80/:443 are actually opened on the target host's firewall/
+# security list, which today are deliberately SSH-only (Cloudflare
+# Tunnel is outbound-only, no inbound ports needed) -- see
+# cloud-init.yaml.tpl's ufw rules and terraform/modules/oci-compute
+# security list (SSH-only, same reasoning).
+#
+# network_mode: host mirrors how the Cloudflare Tunnel container reaches
+# app ports today (host.docker.internal -> 127.0.0.1:PORT) -- reusing
+# "localhost:PORT" targets in the Caddyfile means zero changes to any
+# per-project docker-compose.yml if this is ever activated.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    network_mode: host
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
