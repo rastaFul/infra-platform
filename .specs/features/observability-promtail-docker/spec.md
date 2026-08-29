@@ -1,8 +1,11 @@
 # SPEC: Promtail — PM2 logs → Docker socket (logs de app não chegam mais no Loki)
 
-## Status: DRAFT — aguardando decisão do usuário (D1/D2/D3 abaixo)
+## Status: DONE — 2026-08-29
 ## Created: 2026-08-29
 ## Owner: rodrigo
+
+## Resultado final
+D1/D2/D3 aprovados (restart+validar, escopo total incluindo vetcare/artists-booking, replicar padrão microgrow). Todos os 4 Promtails migrados pra `docker_sd_configs`, validados com gate externo real (Loki query, não só "container Up"). 2 bugs reais achados e corrigidos: `rasta-telegraf` 403 em `/metrics` (token de `security-hardening-phase1` nunca propagado) e filtro `name: vetcare` sem âncora fazendo self-scraping (promtail lendo os próprios logs). Detalhe completo em `.specs/audit/execution.md`.
 
 ---
 

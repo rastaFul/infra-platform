@@ -82,3 +82,28 @@ Usuário confirmou pelo painel Cloudflare Zero Trust que a config de roteamento 
 
 **Spec `local-boot-persistence`: DONE.** Todos os 5 componentes (rastafinancas, microgrow, vetcare, artists-booking, platform-tunnel) migrados de PM2 pra Docker Compose com `restart: unless-stopped`, servindo local E publicamente. `wsl-boot.sh` limpo (sem PM2, com cron). PM2 fica instalado mas sem nenhum processo gerenciado.
 - Status: DONE
+
+## Task: observability-promtail-docker — D1/D2/D3 aprovados, execução completa — 2026-08-29
+
+Usuário aprovou: D1 (restartar e validar rastafinancas), D2 (escopo total — restaurar rastafinancas/microgrow E criar do zero pra vetcare/artists-booking), D3 (replicar o padrão `docker_sd_configs` do microgrow).
+
+**D1 — restart rastafinancas revelou 2 achados reais, não só o esperado**:
+1. `rasta-telegraf`/`rasta-promtail` restartaram limpo, mas `rasta-telegraf` deu **403 Forbidden** em `/metrics` — o token Bearer adicionado por `security-hardening-phase1` (2026-08-28) nunca foi propagado pro telegraf. Corrigido: `bearer_token_string = "${METRICS_TOKEN}"` no `telegraf.conf` + `METRICS_TOKEN` no `.env`/compose. Confirmado sem erro após fix.
+2. Comentários `~/services/platform` desatualizados (pré-consolidação ADR-010) em `rastafinancas` e `microgrow` — corrigidos pro path real.
+
+**Migração dos 4 Promtails pra `docker_sd_configs`** (rastafinancas + microgrow reescritos, vetcare + artists-booking criados do zero):
+- rastafinancas: 4 jobs de arquivo (`/pm2logs/*.log`) → 1 job Docker, containers `rastafinancas-api`/`rastafinancas-web`.
+- microgrow: job Docker existente estendido de 4 pra 6 containers (+ api/webapp/webapp-sim/simulator). Achado bônus: filtro tinha `microgrow-influxdb`/`microgrow-grafana` que **nunca existiram** como nomes de container (são `platform-influxdb`/`platform-grafana` compartilhados) — dead config removido.
+- vetcare: Promtail criado do zero (nunca teve).
+- artists-booking: Promtail criado do zero (nunca teve).
+
+**Bug real sério achado e corrigido (vetcare)**: filtro `name: vetcare` sem âncora fazia *substring match* — capturava `vetcare`, `vetcare-postgres-1`, `vetcare-postgres_test-1` e **o próprio `vetcare-promtail`** (self-scraping — promtail lendo seus próprios logs de volta, risco real de loop de crescimento de log). Resultado prático: zero linhas chegavam no Loki, erro de push ficava mascarado (mensagem truncada nos logs do próprio promtail, só resolvido testando push bruto via `curl` num container compartilhando o namespace de rede do promtail — 204 confirmou que a conectividade sempre esteve OK, o problema era o alvo errado). Corrigido com regex ancorado (`^vetcare$`) — aplicado como hardening preventivo também em rastafinancas e microgrow (nenhum bug lá, mas mesmo risco de classe), e usado desde o início no de artists-booking.
+
+**Gates externos reais, não self-reportados**:
+- `promtail -check-syntax`: 4/4 PASS
+- `docker compose config`: 4/4 PASS (rastafinancas-observability, microgrow, vetcare, artists-booking)
+- Discovery count (`docker logs | grep -c "added Docker target"`): rasta=2 (esperado 2), microgrow=6 (esperado 6), vetcare=1 (esperado 1, era 4 antes do fix), artists=2 (esperado 2) — todos batem exato, sem alvo a mais/a menos.
+- **Loki query real (`/loki/api/v1/query_range`), não só "container Up"**: gerado tráfego real (`curl /health`) em cada API, linhas confirmadas chegando com label `container` correto — rastafinancas-api (5 linhas), microgrow-api (3 linhas), vetcare (5 linhas, após o fix), artists-api (5 linhas). rastafinancas-web mostrou 0 linhas por não termos gerado log novo, não por falha — Next.js sem log por request, comportamento normal, não regressão.
+- Transiente observado e não tratado como falha: primeiro flush de cada promtail recém-criado às vezes falha uma vez ("final error sending batch", mensagem truncada nos logs do próprio promtail) e se autorrecupera no ciclo seguinte — confirmado via múltiplos restarts, dado real sempre passou a fluir depois.
+
+- Status: DONE

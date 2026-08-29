@@ -166,6 +166,15 @@ Decisão/achados:
 - `wsl-boot.sh`: `pm2 resurrect` removido (obsoleto, D4 completo — nada mais roda em PM2), `service cron start` adicionado (fecha item do Done Criteria desta spec).
 Ver spec `features/local-boot-persistence/spec.md`, execution.md sessão "resume after notebook crash".
 
+## D-2026-08-29-1: observability-promtail-docker — 4 Promtails migrados, 2 bugs reais achados
+Contexto: usuário aprovou D1 (restartar rastafinancas e validar de verdade)/D2 (escopo total, incluir vetcare/artists-booking)/D3 (replicar padrão `docker_sd_configs` do microgrow).
+Decisão/achados:
+- **rasta-telegraf 403 em `/metrics`**: token Bearer de `security-hardening-phase1` (2026-08-28) nunca foi propagado pro telegraf, que ficou 403 silencioso desde então. Corrigido com `bearer_token_string` + `METRICS_TOKEN` no env.
+- **4 Promtails migrados de arquivo (`/pm2*logs/*.log`, morto desde a migração PM2→Docker) pra `docker_sd_configs`**: rastafinancas e microgrow reescritos, vetcare e artists-booking criados do zero (nunca tiveram).
+- **Bug real sério**: filtro `name: vetcare` sem âncora regex fazia *substring match*, capturando `vetcare-postgres-1`, `vetcare-postgres_test-1` e **o próprio `vetcare-promtail`** — self-scraping (promtail lendo os próprios logs de volta). Resultado: zero dado chegava no Loki. Corrigido com `^vetcare$` e aplicado como hardening preventivo (mesma classe de risco) nos outros 3, mesmo sem bug confirmado neles.
+- Validado com gate externo real: `promtail -check-syntax` 4/4, `docker compose config` 4/4, contagem de discovery batendo exato (2/6/1/2), e query real na API do Loki confirmando linhas novas chegando (não só "container Up") pros 4.
+Ver `.specs/audit/execution.md` e `features/observability-promtail-docker/spec.md` (DONE).
+
 ## D-2026-08-27-4: vault-init.sh adiado para Batch 3
 Contexto: com Docker Desktop de volta, `docker compose up` do platform stack (Vault + OTEL Collector) rodou limpo e `vault status` respondeu (uninitialized, sealed — esperado). O script `vault-init.sh` de fato inicializa o Vault, gerando root token + unseal keys (ação sensível, sem rollback trivial).
 Decisão: não executar vault-init.sh como parte do fechamento de gate do Batch 1. Fica como primeira tarefa formal do Batch 3, com spec própria cobrindo AppRole por projeto. Containers vault/otel-collector deixados rodando (isolados, portas só 127.0.0.1) — não há motivo pra derrubar.

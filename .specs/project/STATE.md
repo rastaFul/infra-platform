@@ -195,3 +195,11 @@ Próximo item do roadmap (Batch 3, Promtail PM2→Docker). Investigação real (
 - **microgrow**: `microgrow-promtail` rodando, já tem `docker_sd_configs` funcional (padrão comprovado) cobrindo mosquitto/influxdb/grafana/telegraf, mas NÃO os containers de app (api/webapp/webapp-sim/simulator) migrados ontem — só resta estender o filtro.
 - **vetcare/artists-booking**: nunca tiveram Promtail — não é regressão, é gap pré-existente, fora do escopo original deste item. Registrado como possível follow-up (D2 da spec).
 Spec criada em `features/observability-promtail-docker/spec.md`, aguardando D1 (restart dos containers do rastafinancas, confirmar que não foram parados de propósito)/D2 (escopo: só rasta+microgrow ou também vetcare/artists)/D3 (convenção de labels — recomendação: replicar o padrão do microgrow que já funciona).
+
+## Sessão 2026-08-29 (continuação 2) — observability-promtail-docker DONE
+Usuário aprovou D1/D2/D3 (restart+validar, escopo total, replicar padrão microgrow). Executado e validado com gate externo real (Loki query, não só "container Up"):
+- rastafinancas: telegraf 403 corrigido (token de segurança nunca propagado) + promtail migrado pra Docker discovery.
+- microgrow: promtail estendido de 4 pra 6 containers + removido filtro morto (`microgrow-influxdb`/`microgrow-grafana`, nunca existiram).
+- vetcare: promtail criado do zero — achado bug real de self-scraping (filtro sem âncora capturava o próprio promtail), corrigido.
+- artists-booking: promtail criado do zero, já com filtro ancorado desde o início.
+Ver D-2026-08-29-1 e spec (DONE). Roadmap Batch 3 do infra-platform está 100% fechado agora.
