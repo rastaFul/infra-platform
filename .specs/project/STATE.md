@@ -188,3 +188,10 @@ Painel real: Networks → Tunnels → rastafinancas → **"Published application
 
 ## Sessão 2026-08-29 — local-boot-persistence DONE, todos os 5 componentes migrados e validados
 6/6 rotas públicas confirmadas (curl real): vetcare/financas/grow/grow-sim/artists → 307, metrics → 302. Nenhum 502. `wsl-boot.sh` sem PM2 (só cron). PM2 instalado, sem processos.
+
+## Sessão 2026-08-29 (continuação) — observability-promtail-docker: spec DRAFT
+Próximo item do roadmap (Batch 3, Promtail PM2→Docker). Investigação real (lido cada compose/config, não assumido):
+- **rastafinancas**: `rasta-telegraf`/`rasta-promtail` estão `Exited (0) 3 weeks ago` — achado sem relação com a migração PM2 de ontem, gap mais velho e maior (produto sem logs/métricas coletados há 3 semanas). `telegraf.conf` já usa `host.docker.internal:3001`, continua válido, não precisa mudar. `promtail/config.yml` só tem jobs de arquivo pro path PM2 morto.
+- **microgrow**: `microgrow-promtail` rodando, já tem `docker_sd_configs` funcional (padrão comprovado) cobrindo mosquitto/influxdb/grafana/telegraf, mas NÃO os containers de app (api/webapp/webapp-sim/simulator) migrados ontem — só resta estender o filtro.
+- **vetcare/artists-booking**: nunca tiveram Promtail — não é regressão, é gap pré-existente, fora do escopo original deste item. Registrado como possível follow-up (D2 da spec).
+Spec criada em `features/observability-promtail-docker/spec.md`, aguardando D1 (restart dos containers do rastafinancas, confirmar que não foram parados de propósito)/D2 (escopo: só rasta+microgrow ou também vetcare/artists)/D3 (convenção de labels — recomendação: replicar o padrão do microgrow que já funciona).

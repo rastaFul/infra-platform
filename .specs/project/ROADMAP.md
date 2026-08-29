@@ -34,7 +34,7 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 - [x] `vault-init.sh` (unseal, AppRole por projeto) — feito 2026-08-27, ver D-2026-08-27-4/D-2026-08-28-3
 - [x] Migração de segredos `.env` → Vault (KV v2) — feito 2026-08-28. Não é "dynamic secrets" de verdade (short-lived), é Vault-como-fonte-canônica + sync pro `.env` — decisão deliberada pra essa escala. Ver `docs/how-to/vault-secrets-workflow.md` e D-2026-08-28-7
 - [x] Migração PM2 → Docker Compose completa — 5/5 componentes (rastafinancas, microgrow, vetcare, artists-booking, platform-tunnel), feito 2026-08-29. Incidente real no meio (tunnel remotely-managed apontando pro `localhost` pré-containerização, 6 rotas públicas em 502) achado e corrigido, validado com curl real. Ver `features/local-boot-persistence/spec.md` (DONE), D-2026-08-28-10
-- [ ] **Promtail: logs PM2 → Docker socket** — agora literalmente quebrado (não só pendente): Promtail ainda lê `~/.pm2/logs`, que não recebe mais nada desde que os 5 componentes migraram pra Docker. Nenhum log de app está indo pro Loki agora. Próximo passo natural — ver abaixo.
+- [ ] **Promtail: logs PM2 → Docker socket** — spec escrita `features/observability-promtail-docker/spec.md` (DRAFT, aguardando D1/D2/D3). Achado extra real: rastafinancas tem `rasta-telegraf`/`rasta-promtail` parados há 3 semanas (gap maior e mais velho que só o path do PM2). microgrow já tem o padrão certo (`docker_sd_configs`) funcionando pra parte da stack, só falta estender pros containers de app.
 
 ## Segurança Profissional — Fase 1 — DONE (2026-08-28)
 
