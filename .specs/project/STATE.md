@@ -196,6 +196,9 @@ Próximo item do roadmap (Batch 3, Promtail PM2→Docker). Investigação real (
 - **vetcare/artists-booking**: nunca tiveram Promtail — não é regressão, é gap pré-existente, fora do escopo original deste item. Registrado como possível follow-up (D2 da spec).
 Spec criada em `features/observability-promtail-docker/spec.md`, aguardando D1 (restart dos containers do rastafinancas, confirmar que não foram parados de propósito)/D2 (escopo: só rasta+microgrow ou também vetcare/artists)/D3 (convenção de labels — recomendação: replicar o padrão do microgrow que já funciona).
 
+## Sessão 2026-08-29 (continuação 4) — bug crítico de produção em artists-booking, achado pelo harness-dev
+Agente `harness-dev` (sessão paralela, auditoria de UX) achou registro de usuário 100% quebrado em produção rodando o gate Playwright pré-existente — escalou corretamente como achado de infra, não UX. Verificado independentemente: `POST /api/v1/auth/register` 500 real, `"attempt to write a readonly database"`. Causa: bind-mount `apps/api/prisma` dono do host (uid 1000) vs container rodando como `appuser` (uid 1001) — regressão da migração PM2→Docker nunca antes exercitada. Corrigido de imediato (chown + restart, validado com o request real) e de forma permanente (`docker-entrypoint.sh` que corrige a permissão em todo boot, testado simulando clone novo — self-heal confirmado). `artists-booking` commit `827f282`. Ver D-2026-08-29-3.
+
 ## Sessão 2026-08-29 (continuação 3) — Caddy prep (inativo) + vetcare_net
 Discussão K8s vs Compose (respondida via ADR-001 existente) e reverse proxy pro dia que o Cloudflare Tunnel sair do caminho (ADR-009 já previa revisitar isso, nunca escrito). Usuário pediu execução dos 2 itens sem bloqueio externo:
 - `ingress/caddy/` criado, não ativo, `caddy validate` PASS. Ver D-2026-08-29-2.

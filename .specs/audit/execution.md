@@ -94,6 +94,22 @@ Usuário pediu os 2 itens de "zero bloqueio externo" levantados na conversa (ADR
 - **Incidente real durante a aplicação** (não escondido): `docker compose up -d` sozinho deixou o relay de porta host→container quebrado pra `vetcare`/`postgres` (3004 e 5432 pararam de escutar no host, apesar do container reportar `healthy` e conectividade interna OK) — sintoma de troca de rede em containers já rodando no Docker Desktop/WSL2, não bug do meu compose. Resolvido com `docker compose down` completo + `up -d` (recria os containers do zero, não só troca de rede). Confirmado: `ss -tlnp` mostrando 3004/5432 escutando, `curl localhost:3004/api/health` 200, `curl https://vetcare.rastaful.dev` 307 (rota pública via tunnel também confirmada, não só local).
 - Status: DONE
 
+## Task: artists-booking — bug crítico de produção (registro de usuário quebrado) — 2026-08-29
+
+Reportado pelo agente `harness-dev` (sessão paralela em `artists-booking`, auditoria de UX): suíte Playwright funcional pré-existente rodada como gate prévio (23 passed, 6 failed, todas convergindo numa causa raiz). `POST /api/v1/auth/register` → 500. Diagnóstico do harness-dev (correto, verificado independentemente antes de agir — nunca confiei no relato sozinho):
+
+**Confirmado ao vivo**: `curl -X POST /api/v1/auth/register` → 500 real, `"attempt to write a readonly database"` (SQLite/Prisma).
+
+**Causa raiz confirmada**: `apps/api/prisma` é bind-mount (`docker-compose.dev.yml`) — dono no host é `node:node` (uid 1000, mesmo do usuário rodrigo), mas o container roda como `appuser` (uid 1001, endurecimento de segurança anterior). O `Dockerfile` já fazia `--chown=appuser:appgroup` no `COPY`, mas o bind-mount em runtime esconde essa permissão com o dono real do host — regressão introduzida pela migração PM2→Docker (a versão PM2 rodava como o próprio usuário do host, sem esse descompasso de uid).
+
+**Fix imediato** (produção): `docker exec -u root artists-api chown -R appuser:appgroup /app/apps/api/prisma` (sem sudo no host — chown pra outro uid precisa de root, só consegui de dentro do container, que roda sem user-namespace remap = root real sobre o bind mount). Container precisou de restart depois (processo Node já tinha o handle do arquivo aberto como somente-leitura desde o boot, chown sozinho não bastava).
+- Validado com o request exato que falhava: `POST /register` → 201, `POST /login` → 200, usuário de teste confirmado com uma conexão Prisma nova e independente, depois removido.
+
+**Fix permanente** (não só o incidente, a causa): container mudou de `USER appuser` fixo pra iniciar como root + `docker-entrypoint.sh` que faz `chown -R appuser:appgroup` no bind-mount TODA vez que sobe, depois usa `su-exec` pra rodar o processo real como appuser (mesmo padrão de imagens oficiais tipo postgres). `apk add su-exec` adicionado.
+- **Teste de autocorreção real, não hipotético**: resetei o dono do host de volta pra uid 1000 (simulando um `git clone` novo), recriei o container sem tocar em mais nada manualmente, confirmei que a permissão voltou sozinha pra 1001 e `POST /register` funcionou de primeira. `docker exec artists-api id` confirmando PID 1 ainda roda como `appuser` — postura de segurança preservada, só `docker exec` interativo mudou de default (agora root, documentado no Dockerfile).
+- `docker build`: PASS. Commitado só os 2 arquivos meus (`Dockerfile`, `docker-entrypoint.sh`) — sessão paralela do harness-dev ativa no mesmo repo, não toquei em nada dela (specs/screenshots das features 24-32).
+- Status: DONE
+
 ## Task: observability-promtail-docker — D1/D2/D3 aprovados, execução completa — 2026-08-29
 
 Usuário aprovou: D1 (restartar e validar rastafinancas), D2 (escopo total — restaurar rastafinancas/microgrow E criar do zero pra vetcare/artists-booking), D3 (replicar o padrão `docker_sd_configs` do microgrow).
