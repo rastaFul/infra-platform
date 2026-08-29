@@ -18,7 +18,7 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 - [x] Módulo Terraform `oci-compute/` (VCN, subnet, security list — só SSH, sem porta de app — instância ARM, cloud-init com Docker+Coolify) — escrito 2026-08-28, `validate`/`fmt`/`init` PASS, `plan` real bloqueado até as contas existirem (teto do testável agora)
 - [x] `environments/oci-free/` (backend Terraform Cloud, ADR 008)
 - [ ] Deploy da platform stack via Coolify no Oracle
-- [ ] Migração PM2 → Docker Compose (1 serviço por vez)
+- [x] Migração PM2 → Docker Compose (1 serviço por vez) — feito 2026-08-29, ver Batch 3
 - Ver ADR 005, 007, 008 | Spec: `docs/how-to/provision-oracle-free-tier.md` (DRAFT)
 
 ## Batch 2 — CI/CD por projeto — quase tudo DONE
@@ -29,11 +29,12 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 - [x] Grafana dashboards golden signals — **achado 2026-08-28**: `golden-signals.json` (criado no Batch 1, órfão até o Prometheus existir) já cobre artists-booking e rastafinancas via variável `$service`, confirmado com dado real fluindo. microgrow já tinha os próprios. **vetcare é o único sem `/metrics`** — spec delegada pro harness-dev (`vetcare/.specs/features/observability-metrics/spec.md`)
 - Ver ADR 006, 009
 
-## Batch 3 — Vault real + migração completa — parcial DONE
+## Batch 3 — Vault real + migração completa — quase tudo DONE
 
 - [x] `vault-init.sh` (unseal, AppRole por projeto) — feito 2026-08-27, ver D-2026-08-27-4/D-2026-08-28-3
 - [x] Migração de segredos `.env` → Vault (KV v2) — feito 2026-08-28. Não é "dynamic secrets" de verdade (short-lived), é Vault-como-fonte-canônica + sync pro `.env` — decisão deliberada pra essa escala. Ver `docs/how-to/vault-secrets-workflow.md` e D-2026-08-28-7
-- [ ] Promtail: logs PM2 → Docker socket
+- [x] Migração PM2 → Docker Compose completa — 5/5 componentes (rastafinancas, microgrow, vetcare, artists-booking, platform-tunnel), feito 2026-08-29. Incidente real no meio (tunnel remotely-managed apontando pro `localhost` pré-containerização, 6 rotas públicas em 502) achado e corrigido, validado com curl real. Ver `features/local-boot-persistence/spec.md` (DONE), D-2026-08-28-10
+- [ ] **Promtail: logs PM2 → Docker socket** — agora literalmente quebrado (não só pendente): Promtail ainda lê `~/.pm2/logs`, que não recebe mais nada desde que os 5 componentes migraram pra Docker. Nenhum log de app está indo pro Loki agora. Próximo passo natural — ver abaixo.
 
 ## Segurança Profissional — Fase 1 — DONE (2026-08-28)
 
@@ -49,7 +50,7 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 - [x] Repo `dev-environment` criado (privado) — `github.com/rastaFul/dev-environment`
 - [x] 4 roles escritas: `credentials-check`, `packages`, `dotfiles`, `agents-harness`
 - [x] Gates: `--syntax-check` PASS, `--check --diff` dry-run PASS (0 failed)
-- [ ] Rodar de verdade nesta máquina (não `--check`) — fecha o drift achado em `~/.claude/skills`/`steering`
+- [x] Rodar de verdade nesta máquina (não `--check`) — feito 2026-08-28, 2 bugs reais achados/corrigidos (templates `ansible_managed` sem `#`, bug do módulo `git` no ansible-core 2.13.13), drift de `~/.claude/skills`/`steering` fechado. Ver D-2026-08-28-1
 - [ ] `ansible-lint` — pendente máquina com Python 3.9+
 - [ ] Validar `darwin.yml` no primeiro Mac real
 - Ver D-2026-08-27-21
