@@ -29,3 +29,13 @@ providers:
       path: /var/lib/grafana/dashboards/platform
       foldersFromFilesStructure: false
     folder: Platform
+
+  - name: artists-booking
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/artists-booking
+      foldersFromFilesStructure: false
+    folder: Artists Booking

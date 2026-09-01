@@ -2,7 +2,14 @@
 
 ## Session: Infra Strategy — Phase 0 Execution
 ## Status: EXECUTING
-## Last updated: 2026-08-29
+## Last updated: 2026-09-01
+
+## Sessão 2026-09-01 — artists-booking product-health dashboard + alertas (Spec 53 delegada) — DONE
+- Dashboard `Artists Booking / Product Health (Spec 53)` + 3 alertas Prometheus criados, gates externos PASS (docker compose config, Grafana healthy, dashboard e alertas confirmados carregados via API real). Painéis/alertas ainda sem dado real — esperado, apps/api (spec 53) sendo instrumentado em sessão paralela.
+- **Bug crítico achado e corrigido**: provisioning de alertas do Grafana estava quebrado pra TODO o platform (microgrow + rastafinancas, 0 regras carregando desde 2026-08-29) por causa de uma subpasta `alerting/rules/` que o Grafana não suporta (grafana/grafana#53294). Corrigido pros 3 projetos (flat layout). 24 regras confirmadas carregando agora.
+- Achado secundário registrado, não corrigido (fora de escopo, precisa decisão do usuário): SMTP do canal de alerta (Gmail) com credencial inválida — só apareceu porque os alertas passaram a rodar de verdade.
+- Ver D-2026-09-01-1 em DECISIONS.md e `.specs/audit/execution.md`.
+- Próxima ação: nenhuma pendente desta frente — aguardando artists-api (sessão paralela) exportar as métricas de verdade pra validar dado real no dashboard (task T7 da spec 53, do lado do produto).
 
 ## Current Tasks (Batch 1 Parallel) — CLOSED
 

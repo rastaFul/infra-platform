@@ -1,0 +1,188 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: artists-booking-p0-critical
+    folder: Artists Booking Alerts
+    interval: 1m
+    rules:
+      - uid: artists-search-zero-results-ratio
+        title: "Artists Booking — Busca sem resultado > 90% sustentada"
+        condition: C
+        for: 15m
+        noDataState: OK
+        execErrState: OK
+        labels:
+          severity: critical
+          project: artists-booking
+          component: search
+        annotations:
+          summary: "Mais de 90% das buscas não retornam nenhum resultado nos últimos 15 minutos"
+          description: "Verificar: Grafana → Artists Booking → Product Health | possível gap de oferta (poucos artistas visíveis) ou bug no filtro de busca. Ver também artist_profiles_visible_ratio no mesmo dashboard."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus-platform
+            model:
+              editorMode: code
+              expr: |
+                sum(rate(search_zero_results_total{service="artists-api"}[15m]))
+                / sum(rate(search_performed_total{service="artists-api"}[15m])) * 100
+              instant: false
+              range: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              legendFormat: __auto
+              refId: A
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [90]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: "__expr__"
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+
+      - uid: artists-register-5xx-rate
+        title: "Artists Booking — Erro 5xx em /register > 5% (5min)"
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: OK
+        labels:
+          severity: critical
+          project: artists-booking
+          component: auth
+        annotations:
+          summary: "Taxa de erro 5xx na rota de registro acima de 5% nos últimos 5 minutos"
+          description: "Verificar: docker logs artists-api | Grafana → Artists Booking → Product Health (painel de erro 5xx por rota). Rota afetada: /api/v1/auth/register."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-platform
+            model:
+              editorMode: code
+              expr: |
+                sum(rate(http_requests_total{service="artists-api", route="/api/v1/auth/register", status_code=~"5.."}[5m]))
+                / sum(rate(http_requests_total{service="artists-api", route="/api/v1/auth/register"}[5m])) * 100
+              instant: false
+              range: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              legendFormat: __auto
+              refId: A
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [5]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: "__expr__"
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+
+  - orgId: 1
+    name: artists-booking-p1-warning
+    folder: Artists Booking Alerts
+    interval: 2m
+    rules:
+      - uid: artists-profiles-visible-ratio-drop
+        title: "Artists Booking — artist_profiles_visible_ratio caiu >20% vs média da última hora"
+        condition: D
+        for: 5m
+        noDataState: OK
+        execErrState: OK
+        labels:
+          severity: warning
+          project: artists-booking
+          component: data-integrity
+        annotations:
+          summary: "Regressão de disponibilidade de perfis — queda súbita comparada à média de 1h. Heurística, ajustar threshold após validar em produção real."
+          description: "Verificar se um deploy recente introduziu um bug no cálculo de isVisible/bio, ou se um número relevante de artistas ficou invisível. Comparar com Grafana → Artists Booking → Product Health."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: prometheus-platform
+            model:
+              editorMode: code
+              expr: avg_over_time(artist_profiles_visible_ratio{service="artists-api"}[1h])
+              instant: false
+              range: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              legendFormat: __auto
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-platform
+            model:
+              editorMode: code
+              expr: artist_profiles_visible_ratio{service="artists-api"}
+              instant: false
+              range: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              legendFormat: __auto
+              refId: B
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              expression: "($A - $B) / $A * 100"
+              type: math
+              refId: C
+          - refId: D
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [20]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: "__expr__"
+              expression: C
+              reducer: last
+              refId: D
+              type: reduce
