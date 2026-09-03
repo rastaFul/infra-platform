@@ -111,6 +111,165 @@ groups:
               refId: C
               type: reduce
 
+      - uid: artists-profile-update-5xx-rate
+        title: "Artists Booking — Erro 5xx em PATCH /artist/profile > 5% (5min)"
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: OK
+        labels:
+          severity: critical
+          project: artists-booking
+          component: profile
+        annotations:
+          summary: "Taxa de erro 5xx na rota de atualização de perfil de artista acima de 5% nos últimos 5 minutos"
+          description: "Verificar: docker logs artists-api | Grafana → Artists Booking → Product Health (painel de erro 5xx por rota). Rota afetada: PATCH /api/v1/artist/profile."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-platform
+            model:
+              editorMode: code
+              expr: |
+                sum(rate(http_requests_total{service="artists-api", method="PATCH", route="/api/v1/artist/profile", status_code=~"5.."}[5m]))
+                / sum(rate(http_requests_total{service="artists-api", method="PATCH", route="/api/v1/artist/profile"}[5m])) * 100
+              instant: false
+              range: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              legendFormat: __auto
+              refId: A
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [5]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: "__expr__"
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+
+      - uid: artists-create-request-5xx-rate
+        title: "Artists Booking — Erro 5xx em POST /requests > 5% (5min)"
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: OK
+        labels:
+          severity: critical
+          project: artists-booking
+          component: requests
+        annotations:
+          summary: "Taxa de erro 5xx na rota de criação de solicitação (booking request) acima de 5% nos últimos 5 minutos"
+          description: "Verificar: docker logs artists-api | Grafana → Artists Booking → Product Health (painel de erro 5xx por rota). Rota afetada: POST /api/v1/requests."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-platform
+            model:
+              editorMode: code
+              expr: |
+                sum(rate(http_requests_total{service="artists-api", method="POST", route="/api/v1/requests", status_code=~"5.."}[5m]))
+                / sum(rate(http_requests_total{service="artists-api", method="POST", route="/api/v1/requests"}[5m])) * 100
+              instant: false
+              range: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              legendFormat: __auto
+              refId: A
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [5]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: "__expr__"
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+
+      - uid: artists-upgrade-plan-5xx-rate
+        title: "Artists Booking — Erro 5xx em POST /users/upgrade-plan > 5% (5min)"
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: OK
+        labels:
+          severity: critical
+          project: artists-booking
+          component: billing
+        annotations:
+          summary: "Taxa de erro 5xx na rota de upgrade de plano acima de 5% nos últimos 5 minutos"
+          description: "Verificar: docker logs artists-api | Grafana → Artists Booking → Product Health (painel de erro 5xx por rota). Rota afetada: POST /api/v1/users/upgrade-plan."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-platform
+            model:
+              editorMode: code
+              expr: |
+                sum(rate(http_requests_total{service="artists-api", method="POST", route="/api/v1/users/upgrade-plan", status_code=~"5.."}[5m]))
+                / sum(rate(http_requests_total{service="artists-api", method="POST", route="/api/v1/users/upgrade-plan"}[5m])) * 100
+              instant: false
+              range: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              legendFormat: __auto
+              refId: A
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [5]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: "__expr__"
+              expression: A
+              reducer: last
+              refId: C
+              type: reduce
+
   - orgId: 1
     name: artists-booking-p1-warning
     folder: Artists Booking Alerts
