@@ -48,7 +48,7 @@
       }
     ]
   },
-  "description": "Spec 53 (Fase 1) — funil de uso real, integridade de dados de perfil e taxa de erro do Artists Booking (artists-api). Painéis podem aparecer vazios até a instrumentação de métricas ser deployada.",
+  "description": "Spec 53 (Fase 1) — funil de uso real, integridade de dados de perfil e taxa de erro do Artists Booking (artists-api). Spec 54 (RUM híbrido, sistema próprio) — navegação/dead-click/404/error-boundary, conversão de CTA, listas vazias, uso de filtro, duração de wizard, demanda por categoria/região (família N, DemandEvent do M0) e contenção de escrita SQLite. Painéis podem aparecer vazios até a instrumentação de métricas ser deployada.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -318,11 +318,378 @@
       ],
       "title": "Usuários reais vs demo",
       "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "id": 200,
+      "title": "Saúde de navegação (RUM, Spec 54)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "dead_click_total (clique sem efeito observável), frontend_404_total, frontend_error_boundary_total — sinais diretos de fricção/erro de navegação reportados pelo cliente.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 33 },
+      "id": 20,
+      "options": {
+        "legend": { "calcs": ["lastNotNull", "sum"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(dead_click_total{service=\"artists-api\"}[5m]))",
+          "legendFormat": "dead-click",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(frontend_404_total{service=\"artists-api\"}[5m]))",
+          "legendFormat": "404",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(frontend_error_boundary_total{service=\"artists-api\"}[5m]))",
+          "legendFormat": "error boundary",
+          "refId": "C"
+        }
+      ],
+      "title": "Dead-click / 404 / Error Boundary (taxa/s)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "frontend_rum_event_rejected_total{reason} — payload de evento RUM rejeitado pela validação Zod da rota POST /rum-events (nunca gera 500). Sinal de saúde da própria instrumentação, não do produto.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 33 },
+      "id": 21,
+      "options": {
+        "legend": { "calcs": ["lastNotNull", "sum"], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(frontend_rum_event_rejected_total{service=\"artists-api\"}[15m])) by (reason)",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Eventos RUM rejeitados por motivo (taxa/s)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 41 },
+      "id": 201,
+      "title": "Conversão de CTA (Spec 54)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "cta_click_total{cta} vs cta_exposure_total{cta} — clique e exposição por CTA rastreado (prova de conceito: whatsapp_handoff, upgrade_plan_select).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 42 },
+      "id": 22,
+      "options": {
+        "legend": { "calcs": ["lastNotNull", "sum"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(cta_click_total{service=\"artists-api\"}[5m])) by (cta)",
+          "legendFormat": "clique {{cta}}",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(cta_exposure_total{service=\"artists-api\"}[5m])) by (cta)",
+          "legendFormat": "exposição {{cta}}",
+          "refId": "B"
+        }
+      ],
+      "title": "CTA — clique vs exposição (taxa/s)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "Razão clique/exposição por CTA — leitura direta de taxa de conversão, sem precisar comparar 2 séries de cabeça.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "percentunit",
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "green", "value": 0.3 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 42 },
+      "id": 23,
+      "options": {
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(cta_click_total{service=\"artists-api\"}[15m])) by (cta) / sum(rate(cta_exposure_total{service=\"artists-api\"}[15m])) by (cta)",
+          "legendFormat": "{{cta}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Taxa de conversão de CTA (clique/exposição)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 50 },
+      "id": 202,
+      "title": "Listas vazias e uso de filtro (Spec 54)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "list_empty_total{list} — quantas vezes cada lista (oportunidades, candidaturas, notificações, criadores) renderizou vazia.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 51 },
+      "id": 24,
+      "options": {
+        "legend": { "calcs": ["lastNotNull", "sum"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(list_empty_total{service=\"artists-api\"}[15m])) by (list)",
+          "legendFormat": "{{list}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Lista vazia por lista (taxa/s)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "filter_applied_total{filter} — uso de filtro em /criadores (categoria) e /explore (categoria, faixa de preço, disponibilidade).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 51 },
+      "id": 25,
+      "options": {
+        "legend": { "calcs": ["lastNotNull", "sum"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(filter_applied_total{service=\"artists-api\"}[15m])) by (filter)",
+          "legendFormat": "{{filter}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Uso de filtro por tipo (taxa/s)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 59 },
+      "id": 203,
+      "title": "Duração de wizard (Spec 54)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "wizard_duration_seconds{wizard} — p50/p95 de duração até completar (onboarding do artista, wizard de contratação). Mede só conclusão real, nunca abandono.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 60 },
+      "id": 26,
+      "options": {
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "histogram_quantile(0.5, sum(rate(wizard_duration_seconds_bucket{service=\"artists-api\"}[15m])) by (le, wizard))",
+          "legendFormat": "p50 {{wizard}}",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "histogram_quantile(0.95, sum(rate(wizard_duration_seconds_bucket{service=\"artists-api\"}[15m])) by (le, wizard))",
+          "legendFormat": "p95 {{wizard}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Duração de wizard — p50/p95 (segundos)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 68 },
+      "id": 204,
+      "title": "Demanda por categoria/região (família N — dado do M0, nunca visualizado)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "demand_by_category{category} — contagem de DemandEvent por categoria. Zero instrumentação nova: o dado já existe desde o M0 do produto.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 69 },
+      "id": 27,
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "demand_by_category{service=\"artists-api\"}",
+          "legendFormat": "{{category}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Demanda por categoria",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "demand_by_region{region} — contagem de DemandEvent por região (regionLabel). Zero instrumentação nova: o dado já existe desde o M0 do produto.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 69 },
+      "id": 28,
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "demand_by_region{service=\"artists-api\"}",
+          "legendFormat": "{{region}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Demanda por região",
+      "type": "bargauge"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 77 },
+      "id": 205,
+      "title": "Sinal de trigger de migração Postgres (Spec 54, família H)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "db_write_contention_total — total cumulativo de erros de contenção de escrita SQLite (SQLITE_BUSY / database is locked / Prisma P2034). Hoje deve estar em 0; qualquer valor > 0 sustentado é sinal real (não estimado) pro trigger de migração SQLite -> Postgres.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 78 },
+      "id": 29,
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "db_write_contention_total{service=\"artists-api\"}",
+          "legendFormat": "contenção SQLite",
+          "refId": "A"
+        }
+      ],
+      "title": "Contenção de escrita SQLite (cumulativo)",
+      "type": "stat"
     }
   ],
   "refresh": "1m",
   "schemaVersion": 39,
-  "tags": ["artists-booking", "product-health", "spec-53"],
+  "tags": ["artists-booking", "product-health", "spec-53", "spec-54"],
   "templating": {
     "list": [
       {
@@ -342,7 +709,7 @@
   "time": { "from": "now-24h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Artists Booking — Product Health (Spec 53)",
+  "title": "Artists Booking — Product Health (Spec 53 + 54)",
   "uid": "artists-booking-product-health",
-  "version": 1
+  "version": 2
 }
