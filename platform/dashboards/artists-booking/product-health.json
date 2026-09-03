@@ -48,7 +48,7 @@
       }
     ]
   },
-  "description": "Spec 53 (Fase 1) — funil de uso real, integridade de dados de perfil e taxa de erro do Artists Booking (artists-api). Spec 54 (RUM híbrido, sistema próprio) — navegação/dead-click/404/error-boundary, conversão de CTA, listas vazias, uso de filtro, duração de wizard, demanda por categoria/região (família N, DemandEvent do M0) e contenção de escrita SQLite. Painéis podem aparecer vazios até a instrumentação de métricas ser deployada.",
+  "description": "Spec 53 (Fase 1) — funil de uso real, integridade de dados de perfil e taxa de erro do Artists Booking (artists-api). Spec 54 (RUM híbrido, sistema próprio) — navegação/dead-click/404/error-boundary, conversão de CTA, listas vazias, uso de filtro, duração de wizard, demanda por categoria/região (família N, DemandEvent do M0) e contenção de escrita SQLite. Spec 67 — Core Web Vitals reais (LCP/CLS/INP p75 por rota). Spec 68 — abandono por etapa dos 2 wizards multi-step (onboarding do artista, contratação). Painéis podem aparecer vazios até a instrumentação de métricas ser deployada.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -685,11 +685,245 @@
       ],
       "title": "Contenção de escrita SQLite (cumulativo)",
       "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 84 },
+      "id": 206,
+      "title": "Core Web Vitals reais — LCP/CLS/INP p75 por rota (Spec 67)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "web_vital_lcp_ms{route} — p75 de Largest Contentful Paint reportado pelo browser real. Thresholds do Core Web Vitals do Google: bom <=2500ms, precisa melhorar <=4000ms, ruim >4000ms.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 2500 },
+              { "color": "red", "value": 4000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 85 },
+      "id": 30,
+      "options": {
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "histogram_quantile(0.75, sum(rate(web_vital_lcp_ms_bucket{service=\"artists-api\"}[15m])) by (le, route))",
+          "legendFormat": "{{route}}",
+          "refId": "A"
+        }
+      ],
+      "title": "LCP p75 (ms) por rota",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "web_vital_cls_ms{route} (na verdade web_vital_cls, adimensional) — p75 de Cumulative Layout Shift. Thresholds do Core Web Vitals do Google: bom <=0.1, precisa melhorar <=0.25, ruim >0.25.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "red", "value": 0.25 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 85 },
+      "id": 31,
+      "options": {
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "histogram_quantile(0.75, sum(rate(web_vital_cls_bucket{service=\"artists-api\"}[15m])) by (le, route))",
+          "legendFormat": "{{route}}",
+          "refId": "A"
+        }
+      ],
+      "title": "CLS p75 (adimensional) por rota",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "web_vital_inp_ms{route} — p75 de Interaction to Next Paint reportado pelo browser real. Thresholds do Core Web Vitals do Google: bom <=200ms, precisa melhorar <=500ms, ruim >500ms.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10 },
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 200 },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 85 },
+      "id": 32,
+      "options": {
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "histogram_quantile(0.75, sum(rate(web_vital_inp_ms_bucket{service=\"artists-api\"}[15m])) by (le, route))",
+          "legendFormat": "{{route}}",
+          "refId": "A"
+        }
+      ],
+      "title": "INP p75 (ms) por rota",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 93 },
+      "id": 207,
+      "title": "Abandono de wizard por etapa (Spec 68)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "wizard_step_reached_total{wizard=\"onboarding_artista\", step} — abandono cumulativo por transição, calculado aqui (1 - reached{N+1}/reached{N}), nunca no backend. Steps confirmados lendo onboarding/page.tsx: 1 (Entrar em Cena), 2 (Seu Trabalho), 3 (Provas/Portfólio), 4 (Revisar/Publicar) — step 0 (WelcomeStep) nunca é reportado.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "percentunit",
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 0.9 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 94 },
+      "id": 33,
+      "options": {
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "1 - (sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"onboarding_artista\", step=\"2\"}) / sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"onboarding_artista\", step=\"1\"}))",
+          "legendFormat": "abandono 1→2",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "1 - (sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"onboarding_artista\", step=\"3\"}) / sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"onboarding_artista\", step=\"2\"}))",
+          "legendFormat": "abandono 2→3",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "1 - (sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"onboarding_artista\", step=\"4\"}) / sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"onboarding_artista\", step=\"3\"}))",
+          "legendFormat": "abandono 3→4",
+          "refId": "C"
+        }
+      ],
+      "title": "Onboarding artista — abandono por etapa",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "description": "wizard_step_reached_total{wizard=\"contratar\", step} — abandono cumulativo por transição. Steps confirmados lendo contratar/[artistId]/page.tsx: 1 (categoria), 2 (básico), 3 (quando/onde), 4 (investimento), 5 (mensagem), 6 (revisão). Step 7 (Step7Auth) é um branch condicional só pra usuário anônimo em handleReviewContinue — quem já está logado vai direto de 6 pro submit e nunca visita o 7 — por isso excluído deste cálculo (incluir 6→7 infla artificialmente o abandono).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2 },
+          "unit": "percentunit",
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 0.9 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 94 },
+      "id": 34,
+      "options": {
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "1 - (sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"contratar\", step=\"2\"}) / sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"contratar\", step=\"1\"}))",
+          "legendFormat": "abandono 1→2",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "1 - (sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"contratar\", step=\"3\"}) / sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"contratar\", step=\"2\"}))",
+          "legendFormat": "abandono 2→3",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "1 - (sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"contratar\", step=\"4\"}) / sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"contratar\", step=\"3\"}))",
+          "legendFormat": "abandono 3→4",
+          "refId": "C"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "1 - (sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"contratar\", step=\"5\"}) / sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"contratar\", step=\"4\"}))",
+          "legendFormat": "abandono 4→5",
+          "refId": "D"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "1 - (sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"contratar\", step=\"6\"}) / sum(wizard_step_reached_total{service=\"artists-api\", wizard=\"contratar\", step=\"5\"}))",
+          "legendFormat": "abandono 5→6",
+          "refId": "E"
+        }
+      ],
+      "title": "Contratar — abandono por etapa (steps 1-6, step 7 excluído — branch condicional)",
+      "type": "timeseries"
     }
   ],
   "refresh": "1m",
   "schemaVersion": 39,
-  "tags": ["artists-booking", "product-health", "spec-53", "spec-54"],
+  "tags": ["artists-booking", "product-health", "spec-53", "spec-54", "spec-67", "spec-68"],
   "templating": {
     "list": [
       {
@@ -709,7 +943,7 @@
   "time": { "from": "now-24h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Artists Booking — Product Health (Spec 53 + 54)",
+  "title": "Artists Booking — Product Health (Spec 53 + 54 + 67 + 68)",
   "uid": "artists-booking-product-health",
-  "version": 2
+  "version": 3
 }
