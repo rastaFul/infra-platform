@@ -2,7 +2,30 @@
 
 ## Session: Infra Strategy — Phase 0 Execution
 ## Status: EXECUTING
-## Last updated: 2026-09-01
+## Last updated: 2026-09-09
+
+## Sessão 2026-09-09 (continuação 4) — gate de pre-commit LOCAL implementado (DONE)
+Pedido: fechar o gap "nada roda antes de um commit" neste repo (só CI pós-push cobria algo), sem
+instalar o template JS/TS às cegas (`infra-platform` não tem `package.json` — confirmado).
+- Decisão completa (JS/TS template rejeitado, framework `pre-commit` Python rejeitado, git hook
+  nativo escolhido) em D-2026-09-09-6.
+- Implementado: `scripts/pre-commit.sh` (versionado) + `.git/hooks/pre-commit` (wrapper de 1 linha,
+  não versionado — `.git/hooks/` nunca é rastreado). Checagens: gitleaks (staged), terraform fmt
+  -check + validate (staged .tf, via `find-tf-root.sh` já existente), shellcheck (staged .sh),
+  sintaxe YAML/JSON (staged). Ferramenta ausente = SKIPPED com instrução de instalação, nunca
+  bloqueia nem finge PASS (mesmo padrão dos outros `run-*.sh` do repo).
+- `gitleaks` (8.30.1, mesma versão do `Dockerfile.sandbox`) e `shellcheck` (0.10.0) instalados como
+  binários standalone em `~/.local/bin` (mesmo padrão de terraform/trivy/yamllint/gh já nesta
+  máquina) — nenhum dos dois estava presente antes desta sessão.
+- Verificação real: 4 gates testados isoladamente (stage temporário + revert) provando FAIL real —
+  shellcheck (achou e corrigiu um bug real no próprio `scripts/pre-commit.sh`: `cd` sem `|| exit`),
+  terraform fmt+validate, YAML syntax, gitleaks (chave privada RSA bloqueada; string parecida com
+  token do GitHub corretamente NÃO sinalizada — sem falso positivo cego). Commit real de ponta a
+  ponta (`git commit`, sem `--no-verify`) tocando `scripts/pre-commit.sh` — hook rodou sozinho e
+  passou. Detalhe completo em D-2026-09-09-6 e `.specs/audit/execution.md`.
+- Não tocado (fora de escopo, pertence a outras sessões em paralelo): mudanças não commitadas em
+  `docs/reference/repository-layout.md`/`docs/explanation/infra-overview-diagram.md`; nenhum commit
+  feito em `microgrow`/`artists-booking`.
 
 ## Sessão 2026-09-01 — artists-booking product-health dashboard + alertas (Spec 53 delegada) — DONE
 - Dashboard `Artists Booking / Product Health (Spec 53)` + 3 alertas Prometheus criados, gates externos PASS (docker compose config, Grafana healthy, dashboard e alertas confirmados carregados via API real). Painéis/alertas ainda sem dado real — esperado, apps/api (spec 53) sendo instrumentado em sessão paralela.

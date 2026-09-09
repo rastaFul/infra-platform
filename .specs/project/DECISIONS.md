@@ -328,3 +328,63 @@ registrado pra quando o usuário pedir. Quando for feito: trocar `GF_SMTP_HOST`/
 em `platform/docker-compose.yml`/`.env` pro relay SMTP do Resend (`smtp.resend.com`) + adicionar
 `GF_SMTP_USER`/`GF_SMTP_PASSWORD` (API key do Resend) — hoje não existe nenhum dos dois, nem pro
 Gmail nem pro Resend, é por isso que a notificação nunca funcionou.
+
+## D-2026-09-09-6: gate de pre-commit LOCAL — git hook nativo, não o template JS/TS, não o framework `pre-commit` (Python)
+
+Contexto: `infra-platform` não é um projeto de aplicação JS/TS (confirmado: zero `package.json` em
+todo o repo) — é bash (`scripts/`), Terraform real (`terraform/`), stack de observabilidade em
+compose/YAML/JSON (`platform/`, `observability/`), docs Diátaxis. O template de gates local
+(husky + lint-staged + eslint + tsc + commitlint, `agents-harness/claude/install.sh`, já instalado
+em `rastafinancas`/`vetcare`, em andamento em `microgrow`/`artists-booking`) pressupõe um projeto
+Node — não haveria nada em TS/JS pra lintar aqui. Confirmado também que **hoje nada roda antes de
+um commit** neste repo: `skills/policy-gates`, `skills/infra-quality-gates`,
+`skills/security-gates`, `skills/cost-gates` só rodam manualmente (durante execução do harness) ou
+via `.github/workflows/gates.yml` **depois do push** (build do `harness-sandbox` + tflint/
+kubeconform/pluto/conftest/tfsec/checkov/gitleaks/trivy/osv-scanner + Infracost).
+
+Decisão: **git hook nativo** (`scripts/pre-commit.sh`, versionado, chamado por um
+`.git/hooks/pre-commit` de 1 linha — `.git/hooks/` não é versionado por padrão, por isso o wrapper
+fino aponta pro script real). Rejeitado o framework `pre-commit` (Python, `.pre-commit-config.yaml`)
+apesar de ser convenção comum pra repos poliglotas: adicionaria uma dependência de linguagem nova
+(`pip install pre-commit`) e uma DSL própria pra fazer exatamente o que este repo já faz em todo
+lugar — chamar CLIs direto de bash com guarda `command -v` (ver qualquer `skills/*/scripts/run-*.sh`)
+— sem ganho real aqui. Native hook é o mínimo idiomático que reaproveita o estilo já estabelecido.
+
+Escopo do hook (deliberadamente rápido — só o que é seguro/rápido o bastante pra rodar em TODO
+commit, sem duplicar o que já existe em CI/harness):
+- **gitleaks** (`gitleaks protect --staged`) — maior valor aqui (repo lida com `.env`/tokens/Vault).
+  Instalado localmente em `~/.local/bin` (mesmo padrão já usado pra terraform/trivy/yamllint/gh
+  nesta máquina — binário standalone, sem sudo), pinado na mesma versão (8.30.1) já usada em
+  `.harness-sandbox/docker/Dockerfile.sandbox`.
+- **`terraform fmt -check` + `terraform validate`** — só nos `.tf` staged; usa
+  `skills/infra-quality-gates/scripts/find-tf-root.sh` (já existente) pra achar o root module real
+  em vez de assumir "." (mesmo bug documentado no header daquele script pra CI). NÃO roda
+  `plan`/`apply` — sem credenciais de nuvem aqui, e não é o objetivo de um gate local.
+- **shellcheck** — só nos `.sh` staged. Instalado do mesmo jeito que gitleaks (binário standalone,
+  `~/.local/bin`, sem sudo).
+- **YAML/JSON syntax** (`python3 -c "import yaml; yaml.safe_load(...)"` / `python3 -m json.tool`) —
+  formaliza a checagem ad-hoc já usada informalmente nesta sessão pra dashboards Grafana/compose/
+  alerting rules.
+
+Explicitamente NÃO duplicado aqui (já coberto): tflint/kubeconform/pluto (mais lentos, exigem
+plugins de provider), conftest/OPA, tfsec, checkov, trivy config, semgrep, osv-scanner, syft+grype,
+Infracost — todos já rodam em `gates.yml` pós-push. Ferramenta ausente = gate SKIPPED (nunca bloqueia
+nem finge PASS), mesmo padrão de todo outro script `run-*.sh` deste repo.
+
+**Verificação real feita** (não só "roda sem erro de sintaxe isolado"): 4 testes de FAIL isolados
+antes do commit real (arquivo staged temporário, revertido depois) — shellcheck bloqueou um `.sh`
+com `cd` sem guarda + variável sem aspas (achado real: o próprio `scripts/pre-commit.sh` tinha o
+mesmo bug de `cd` sem guarda, corrigido antes do commit final); `terraform fmt -check` bloqueou um
+recurso mal formatado (e `terraform validate` rodou de verdade, baixando o provider OCI); YAML
+quebrado (`mapping values are not allowed here`) bloqueado; gitleaks bloqueou uma chave privada RSA
+de teste (e corretamente NÃO sinalizou uma string parecida com token do GitHub que não batia com o
+formato/checksum esperado pela regra — não é falso positivo cego). Efeito colateral do teste de
+`terraform validate` (mudança em `.terraform.lock.hcl` por causa do `null_resource` de teste)
+identificado e revertido antes do commit real. Commit final de ponta a ponta (`git commit`, sem
+`--no-verify`) tocando `scripts/pre-commit.sh` de verdade — o hook rodou sozinho, sem intervenção,
+e passou (PASS real, não simulado). Hash: ver STATE.md desta sessão.
+
+Pendência registrada, não bloqueante: `gitleaks`/`shellcheck` instalados só nesta máquina/sessão —
+outra máquina/dev precisa instalar os dois binários (comandos no cabeçalho de
+`scripts/pre-commit.sh` e no header do Dockerfile.sandbox) antes do hook rodar essas duas checagens
+de verdade; até lá, SKIP com mensagem, nunca falso PASS.

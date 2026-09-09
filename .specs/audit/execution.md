@@ -309,3 +309,57 @@ rastafinancas era uma aproximação, não uma p95 real).
   depois do teste manual, na hora de montar o YAML final, não foram re-testados até a avaliação
   real do Grafana pegar o erro. Prática a manter: depois de montar o artefato final (YAML/JSON),
   sempre conferir a avaliação/execução real de novo, não só o teste do fragmento isolado.
+
+## Task: gate de pre-commit LOCAL para infra-platform — 2026-09-09
+Pedido: fechar o gap "nada roda antes de um commit neste repo" — `skills/policy-gates`,
+`skills/infra-quality-gates`, `skills/security-gates`, `skills/cost-gates` só rodavam manualmente
+ou via `.github/workflows/gates.yml` pós-push. Instrução explícita: NÃO instalar o template JS/TS
+(husky+lint-staged+eslint+tsc, `agents-harness/claude/install.sh`) — confirmado que este repo não
+tem `package.json` em lugar nenhum.
+
+Decisão completa em D-2026-09-09-6 (DECISIONS.md): git hook nativo (`scripts/pre-commit.sh`
+versionado + `.git/hooks/pre-commit` wrapper de 1 linha), framework `pre-commit` (Python) e o
+template JS/TS ambos rejeitados e justificados.
+
+**Implementado**:
+- `scripts/pre-commit.sh`: gitleaks (`--staged`), `terraform fmt -check`+`terraform validate` (só
+  `.tf` staged, via `skills/infra-quality-gates/scripts/find-tf-root.sh` já existente pra achar o
+  root module real), shellcheck (só `.sh` staged), sintaxe YAML/JSON (só staged). Tool ausente =
+  `[SKIP]` com instrução de instalação — nunca bloqueia nem finge PASS.
+- `gitleaks` 8.30.1 (mesma versão pinada em `.harness-sandbox/docker/Dockerfile.sandbox`) e
+  `shellcheck` 0.10.0 instalados como binários standalone em `~/.local/bin` — nenhum dos dois
+  estava presente nesta máquina antes desta sessão (mesmo padrão já usado pra terraform/trivy/
+  yamllint/gh, sem sudo).
+
+**Verificação real executada** (não só sintaxe isolada do script):
+1. `shellcheck scripts/pre-commit.sh` direto: achou um bug real no próprio script (`cd
+   "$REPO_ROOT"` sem `|| exit`, SC2164) — corrigido antes de qualquer teste seguinte.
+2. Teste isolado 1 (stage temporário de `scripts/_gate_test_bad.sh` com `cd` sem guarda + variável
+   sem aspas, revertido depois): hook bloqueou (`[FAIL] shellcheck`, exit 1).
+3. Teste isolado 2 (`terraform/environments/oci-free/main.tf` com um `resource` mal formatado,
+   staged, revertido depois): `[FAIL] terraform fmt -check` bloqueou; `terraform validate` rodou
+   de verdade (baixou o provider `oracle/oci` via `terraform init -backend=false`, PASS separado).
+   Efeito colateral achado: `terraform init` reescreveu `.terraform.lock.hcl` (novo provider
+   `hashicorp/null` do recurso de teste) — identificado com `git diff` e revertido (`git checkout
+   --`) antes do commit real, não fazia parte do trabalho pedido.
+4. Teste isolado 3 (`platform/_gate_test_bad.yaml` com YAML quebrado, staged, revertido depois):
+   `[FAIL] yaml syntax` bloqueou (`yaml.scanner.ScannerError: mapping values are not allowed
+   here`).
+5. Teste isolado 4a (fake token estilo GitHub `ghp_...` de tamanho ligeiramente errado, staged,
+   revertido): gitleaks corretamente NÃO sinalizou — confirma que não é um gate "grita com
+   qualquer string parecida com segredo", segue as regras reais do gitleaks (formato/checksum).
+   Teste isolado 4b (chave privada RSA de teste, staged, revertido): `[FAIL] gitleaks` bloqueou
+   (`RuleID: private-key`).
+6. **Commit real de ponta a ponta**: `git add scripts/pre-commit.sh .specs/project/STATE.md
+   .specs/project/DECISIONS.md .specs/audit/execution.md` + `git commit` (sem `--no-verify`) — o
+   hook (`.git/hooks/pre-commit` → `scripts/pre-commit.sh`) rodou sozinho, sem intervenção manual,
+   gitleaks/shellcheck/yaml todos `[PASS]` reais sobre os arquivos de verdade sendo commitados
+   (nenhum `.tf` staged neste commit, então o bloco terraform não executou — já provado
+   separadamente no teste isolado 2). Hash do commit real: ver mensagem do commit / `git log -1`.
+
+Status: DONE. Pendência registrada, não bloqueante: `gitleaks`/`shellcheck` só instalados nesta
+máquina/sessão — outro clone precisa instalar os dois (comandos no cabeçalho de
+`scripts/pre-commit.sh`) antes dessas duas checagens rodarem de verdade lá; até lá, `[SKIP]`, nunca
+falso `[PASS]`. CI (`.github/workflows/gates.yml`) já roda gitleaks incondicionalmente dentro do
+`harness-sandbox` (que já tem o binário), então a rede de segurança pós-push continua intacta
+mesmo nos clones sem os binários locais.
