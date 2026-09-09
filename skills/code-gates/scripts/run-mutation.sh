@@ -44,7 +44,19 @@ STRYKER_STATUS="PASS"
 
 # Parse the clear-text summary table's "All files" row, e.g.:
 #   All files   |   85.00 |       34 |         0 |          4 |        2 |       0 |
-MUTATION_SCORE=$(grep "All files" "$STRYKER_LOG" | head -1 | awk -F'|' '{gsub(/ /,"",$2); print $2}')
+#
+# BUG FOUND AND FIXED via a real product-repo rollout (rastafinancas,
+# 2026-09-08, 10th real bug this session): this pipeline had no fallback
+# at all. When Stryker finds nothing to mutate (e.g. this template's
+# stryker.conf.json hardcodes src/domain/**/*.ts and
+# src/application/**/*.ts — Clean-Architecture-specific paths that don't
+# exist in every real project's actual folder layout), it produces no
+# "All files" summary line, `grep` exits 1 (no match, not a real error),
+# and — with no `|| true` — that crashed this whole script under
+# `set -e`/`pipefail`, which in turn crashed the calling run-final.sh
+# (same "unprotected bare pipeline" bug class as the grep -c fix earlier
+# today, different script).
+MUTATION_SCORE=$(grep "All files" "$STRYKER_LOG" 2>/dev/null | head -1 | awk -F'|' '{gsub(/ /,"",$2); print $2}' || true)
 [ -z "${MUTATION_SCORE:-}" ] && MUTATION_SCORE=0
 # Guard against non-numeric parse (e.g. log format changed)
 case "$MUTATION_SCORE" in

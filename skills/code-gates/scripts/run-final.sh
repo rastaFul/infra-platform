@@ -49,7 +49,13 @@ print(json.dumps(merged, indent=2))
 # Try sonar if available
 if command -v sonar-scan &>/dev/null && [ -n "${SONAR_HOST_URL:-}" ]; then
   SONAR_OUT=$(sonar-scan "$DIR" 2>&1) || true
-  SONAR_GATE=$(echo "$SONAR_OUT" | grep "SONAR_GATE=" | cut -d= -f2)
+  # Same unprotected-grep class of bug as run-gates.sh/run-mutation.sh —
+  # fixed proactively here too (not actively triggered by any of today's
+  # failures, since this whole block only runs with a real sonar-scan +
+  # SONAR_HOST_URL configured, which none of the rollout targets have —
+  # but the same crash would hit the moment someone does).
+  SONAR_GATE=$(echo "$SONAR_OUT" | grep "SONAR_GATE=" | cut -d= -f2 || true)
+  [ -z "$SONAR_GATE" ] && SONAR_GATE="SKIPPED"
   SONAR_BUGS=$(echo "$SONAR_OUT" | grep "bugs:" | awk '{print $2}' || echo 0)
   SONAR_VULNS=$(echo "$SONAR_OUT" | grep "vulnerabilities:" | awk '{print $2}' || echo 0)
   SONAR_SMELLS=$(echo "$SONAR_OUT" | grep "code_smells:" | awk '{print $2}' || echo 0)
