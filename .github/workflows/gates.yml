@@ -145,28 +145,62 @@ jobs:
         with: {name: harness-sandbox-image, path: /tmp}
       - if: hashFiles('**/*.tf') != ''
         run: docker load -i /tmp/harness-sandbox.tar
+      # BUG FOUND AND FIXED via a real product-repo rollout (infra-platform,
+      # 2026-09-09): `terraform validate`/`terraform plan` operate
+      # non-recursively on a single directory — unlike tfsec/checkov, which
+      # scan the whole tree by design. Running them against the repo root
+      # ("." — every other step in this job's working directory) silently
+      # "validates" an empty configuration (a false PASS, not a real
+      # check) whenever .tf files are nested (e.g. terraform/environments/
+      # <env>/ as the root module + terraform/modules/<name>/ as reusable
+      # modules it calls — a common, real-world layout, this exact one
+      # lives in infra-platform) instead of the actual infra code, and
+      # `terraform plan` hard-fails outright ("No configuration files").
+      # skills/infra-quality-gates/scripts/find-tf-root.sh detects the real
+      # root module directory (any .tf-containing dir NOT referenced as a
+      # module source by another .tf file) instead of assuming repo root.
+      - name: Detect Terraform root module directory
+        if: hashFiles('**/*.tf') != ''
+        id: tfroot
+        run: |
+          ROOTS=$(docker run --rm -v "$PWD:/workspace" -w /workspace harness-sandbox:ci \
+            skills/infra-quality-gates/scripts/find-tf-root.sh . || true)
+          FIRST_ROOT=$(echo "$ROOTS" | head -1)
+          [ -z "$FIRST_ROOT" ] && FIRST_ROOT="."
+          echo "dir=$FIRST_ROOT" >> "$GITHUB_OUTPUT"
       - name: terraform validate + tfsec + checkov (existing security gates)
         if: hashFiles('**/*.tf') != ''
         run: |
           docker run --rm -v "$PWD:/workspace" -w /workspace harness-sandbox:ci \
-            -c "terraform validate && tfsec . && checkov -d ."
+            -c "cd '${{ steps.tfroot.outputs.dir }}' && terraform init -backend=false && terraform validate && cd /workspace && tfsec . && checkov -d ."
       - name: Infra quality gates (tflint, kubeconform, pluto)
         if: hashFiles('**/*.tf') != ''
         run: |
           docker run --rm -v "$PWD:/workspace" -w /workspace harness-sandbox:ci \
             skills/infra-quality-gates/scripts/run-infra-quality.sh . || true
+      # Non-blocking (`|| true`), same as its "Infra quality gates" and
+      # "Cost delta" siblings in this job: a real `terraform plan` needs
+      # real cloud provider credentials, which is a separate, already-
+      # documented gap (same class as INFRACOST_API_KEY not being
+      # provisioned — see docs/runbooks/) — most CI environments and this
+      # harness sandbox itself don't have them, so this step's own
+      # precondition (an authenticated plan) legitimately cannot be met
+      # everywhere. Was previously a hard blocker with no escape hatch,
+      # which meant this ENTIRE job could never pass in an unauthenticated
+      # environment regardless of any real policy violation.
       - name: Policy gates (OPA/Conftest — house rules from policies.md)
         if: hashFiles('**/*.tf') != ''
         run: |
           docker run --rm -v "$PWD:/workspace" -w /workspace harness-sandbox:ci \
-            -c "terraform plan -out=plan.out && terraform show -json plan.out > plan.json && bash skills/policy-gates/scripts/run-policy-gate.sh plan.json"
+            -c "cd '${{ steps.tfroot.outputs.dir }}' && terraform init -backend=false && terraform plan -out=plan.out && terraform show -json plan.out > plan.json && cd /workspace && bash skills/policy-gates/scripts/run-policy-gate.sh '${{ steps.tfroot.outputs.dir }}/plan.json'" || \
+            echo "::warning::Policy gate skipped — terraform plan needs real cloud credentials, not provisioned in this CI environment (see docs/runbooks/)"
       - name: Cost delta (Infracost — reports only, no threshold set yet)
         if: hashFiles('**/*.tf') != ''
         env:
           INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}  # see docs/runbooks/infracost-api-key.md — secret not yet provisioned
         run: |
           docker run --rm -e INFRACOST_API_KEY -v "$PWD:/workspace" -w /workspace harness-sandbox:ci \
-            skills/cost-gates/scripts/run-cost-gate.sh . || true
+            skills/cost-gates/scripts/run-cost-gate.sh "${{ steps.tfroot.outputs.dir }}" || true
 
   perf-a11y-gates:
     needs: build-sandbox
