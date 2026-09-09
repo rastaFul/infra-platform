@@ -1,0 +1,11 @@
+# Decided (QUESTIONS.pt-BR.md #11, 2026-09): single maintainer, owner of
+# every path in this repo is always @rastaFul — no per-path split needed
+# today. Copied as-is into target projects by install.sh (same convention
+# across artists-booking, microgrow, rastafinancas, vetcare, infra-platform
+# unless a project explicitly needs a different owner later).
+#
+# NOTE: this file alone does not enforce review — "Require review from Code
+# Owners" must also be turned on in branch protection settings (repo admin
+# action, see docs/runbooks/branch-protection.md, not auto-applied by this
+# session per SPEC.md scope).
+* @rastaFul

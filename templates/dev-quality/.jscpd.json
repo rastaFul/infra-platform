@@ -1,0 +1,18 @@
+{
+  "reporters": ["json", "console"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/coverage/**",
+    "**/*.spec.ts",
+    "**/*.test.ts",
+    "**/__mocks__/**"
+  ],
+  "gitignore": true,
+  "absolute": true,
+  "format": ["typescript", "javascript", "jsx", "tsx"],
+  "minLines": 5,
+  "minTokens": 50,
+  "threshold": 3
+}

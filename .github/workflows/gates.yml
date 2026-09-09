@@ -1,0 +1,222 @@
+# Harness gates — CI template. Installed into target projects by install.sh
+# (copied to <target>/.github/workflows/gates.yml), same as CLAUDE.md/skills/steering.
+#
+# HARD CONSTRAINT (per SPEC.md "Gate Hardening"): this workflow must run the
+# EXACT SAME scripts, inside the EXACT SAME container, that the agent runs
+# locally during execution — never a parallel/rewritten set of steps. That's
+# why every job builds `docker/Dockerfile.sandbox` from the repo itself
+# instead of re-implementing gate logic in YAML: whatever passes here is
+# byte-for-byte what `sandbox-run.sh` runs on a dev machine.
+#
+# NOTE: the build-sandbox job below still builds the image fresh from the
+# Dockerfile in-repo for every gate run (local==CI holds regardless of
+# registry state). Separately, `publish-image` (bottom of this file) also
+# pushes a multi-arch build to ghcr.io on merge to main — DECIDED
+# (QUESTIONS.pt-BR.md #9): GHCR, not a new decision, this is the registry
+# infra-platform's own ADR 006 already established for the whole platform
+# (build→push GHCR→SSH→docker compose up). No new account/credential is
+# needed — GHCR auth uses the workflow's own automatic GITHUB_TOKEN. This
+# is currently a speed/reuse optimization only (gates still build from
+# source, don't pull); switching gates to `docker pull` from GHCR is a
+# follow-up, not done here.
+
+name: Harness Gates
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  build-sandbox:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build sandbox image (same Dockerfile used locally by sandbox-run.sh)
+        id: build
+        run: |
+          docker build -t harness-sandbox:ci -f .harness-sandbox/docker/Dockerfile.sandbox .harness-sandbox/docker
+          echo "image=harness-sandbox:ci" >> "$GITHUB_OUTPUT"
+      - name: Save image
+        run: docker save harness-sandbox:ci -o /tmp/harness-sandbox.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harness-sandbox-image
+          path: /tmp/harness-sandbox.tar
+          retention-days: 1
+
+  dev-gates:
+    needs: build-sandbox
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # BUG FOUND AND FIXED via a real GitHub Actions run, not local lint
+      # (QUESTIONS.pt-BR.md follow-up, 2026-09): `hashFiles()` is ONLY
+      # allowed inside a STEP's `if:`/`env:`/`with:`/etc — GitHub rejects
+      # the whole workflow file (0 jobs scheduled, generic "workflow file
+      # issue") if it's used at the JOB level, which this job's `if:` used
+      # to do. Confirmed via `actionlint` (yamllint only checks YAML syntax,
+      # not the Actions expression-context schema — this was invisible to
+      # every local check run so far). Moved the condition to a step-level
+      # guard instead. This also removes a real risk for branch protection
+      # (docs/runbooks/branch-protection.md): a job-level `if:` that
+      # evaluates false means the job never runs at all, so a required
+      # status check depending on it would stay pending forever on repos
+      # with no package.json — a step-level guard means the job always
+      # reports a real conclusion (steps just no-op).
+      - if: hashFiles('package.json') != ''
+        uses: actions/download-artifact@v4
+        with: {name: harness-sandbox-image, path: /tmp}
+      - if: hashFiles('package.json') != ''
+        run: docker load -i /tmp/harness-sandbox.tar
+      # BUG FOUND AND FIXED via a real GitHub Actions run (3rd real bug this
+      # pass — see the hashFiles/.harness-sandbox fixes above/in git log):
+      # the image's ENTRYPOINT is already `["/bin/bash"]`, so every
+      # `docker run ... harness-sandbox:ci bash <script>` line below used to
+      # ACTUALLY invoke `/bin/bash bash <script> <args>` — bash then treats
+      # its first argument ("bash", no slash) as the script to run, which
+      # per bash's own semantics for a slash-less script name means IT
+      # SEARCHES $PATH, finds `/bin/bash` itself, and fails with
+      # "cannot execute binary file" trying to read the bash ELF binary as
+      # a text script. Invisible until today's real CI run because local
+      # usage (`sandbox-run.sh`) never passes a command at all — it drops
+      # into an interactive shell via ENTRYPOINT alone, so nobody ever
+      # exercised this exact one-shot invocation form before. Fixed by
+      # dropping the redundant leading `bash` — ENTRYPOINT already provides
+      # it, so `docker run ... harness-sandbox:ci skills/....sh .` and
+      # `docker run ... harness-sandbox:ci -c "compound && commands"` are
+      # both correct as-is once the doubled `bash` is removed.
+      - name: Run the SAME script an agent runs locally (code-gates final)
+        if: hashFiles('package.json') != ''
+        run: |
+          docker run --rm -v "$PWD:/workspace" -w /workspace harness-sandbox:ci \
+            skills/code-gates/scripts/run-final.sh .
+      - name: Architecture conformance (dependency-cruiser)
+        if: hashFiles('package.json') != ''
+        run: |
+          docker run --rm -v "$PWD:/workspace" -w /workspace harness-sandbox:ci \
+            skills/code-gates/scripts/run-architecture-gate.sh . || true
+      - name: Duplication/complexity
+        if: hashFiles('package.json') != ''
+        run: |
+          docker run --rm -v "$PWD:/workspace" -w /workspace harness-sandbox:ci \
+            skills/code-gates/scripts/run-quality-extra.sh . || true
+
+  security-gates:
+    needs: build-sandbox
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: {name: harness-sandbox-image, path: /tmp}
+      - run: docker load -i /tmp/harness-sandbox.tar
+      - name: Run the SAME security gate script used locally
+        run: |
+          docker run --rm -v "$PWD:/workspace" -w /workspace harness-sandbox:ci \
+            skills/security-gates/scripts/run-security-gates.sh .
+      - name: Full SAST + SBOM (final gate — slower, PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          docker run --rm -v "$PWD:/workspace" -w /workspace harness-sandbox:ci \
+            skills/security-gates/scripts/run-security-final.sh .
+
+  infra-gates:
+    needs: build-sandbox
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # See dev-gates above for why this is a step-level (not job-level) guard.
+      - if: hashFiles('**/*.tf') != ''
+        uses: actions/download-artifact@v4
+        with: {name: harness-sandbox-image, path: /tmp}
+      - if: hashFiles('**/*.tf') != ''
+        run: docker load -i /tmp/harness-sandbox.tar
+      - name: terraform validate + tfsec + checkov (existing security gates)
+        if: hashFiles('**/*.tf') != ''
+        run: |
+          docker run --rm -v "$PWD:/workspace" -w /workspace harness-sandbox:ci \
+            -c "terraform validate && tfsec . && checkov -d ."
+      - name: Infra quality gates (tflint, kubeconform, pluto)
+        if: hashFiles('**/*.tf') != ''
+        run: |
+          docker run --rm -v "$PWD:/workspace" -w /workspace harness-sandbox:ci \
+            skills/infra-quality-gates/scripts/run-infra-quality.sh . || true
+      - name: Policy gates (OPA/Conftest — house rules from policies.md)
+        if: hashFiles('**/*.tf') != ''
+        run: |
+          docker run --rm -v "$PWD:/workspace" -w /workspace harness-sandbox:ci \
+            -c "terraform plan -out=plan.out && terraform show -json plan.out > plan.json && bash skills/policy-gates/scripts/run-policy-gate.sh plan.json"
+      - name: Cost delta (Infracost — reports only, no threshold set yet)
+        if: hashFiles('**/*.tf') != ''
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}  # see docs/runbooks/infracost-api-key.md — secret not yet provisioned
+        run: |
+          docker run --rm -e INFRACOST_API_KEY -v "$PWD:/workspace" -w /workspace harness-sandbox:ci \
+            skills/cost-gates/scripts/run-cost-gate.sh . || true
+
+  perf-a11y-gates:
+    needs: build-sandbox
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lighthouse + axe run against a locally-served build
+        if: hashFiles('**/*.tsx', '**/*.jsx') != ''
+        run: echo "requires the target project's own 'npm run build && npm start' preamble — wire per-project, template only, see skills/perf-a11y-gates/SKILL.md"
+
+  policy-gate-status:
+    needs: [dev-gates, security-gates, infra-gates]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: All required gates passed
+        if: needs.dev-gates.result == 'failure' || needs.security-gates.result == 'failure' || needs.infra-gates.result == 'failure'
+        run: |
+          echo "One or more gates failed — see job logs above."
+          exit 1
+
+  # Publishes a multi-arch (amd64+arm64) sandbox image to GHCR — reuse
+  # speed-up for future runs/local pulls, not required for gates to pass
+  # (those always build from source above, see header comment). Runs only
+  # on merge to main, after every gate job above has already passed on this
+  # exact commit — never publishes an unvetted image. Uses the workflow's
+  # own automatic GITHUB_TOKEN (packages: write) — no new secret/account
+  # needed (QUESTIONS.pt-BR.md #9, infra-platform ADR 006 already decided
+  # GHCR as the platform-wide registry).
+  publish-image:
+    needs: [dev-gates, security-gates, infra-gates]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.dev-gates.result != 'failure' && needs.security-gates.result != 'failure' && needs.infra-gates.result != 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # BUG FOUND AND FIXED via a real GitHub Actions run (5th real bug this
+      # pass): `github.repository_owner` preserves the account's actual
+      # casing ("rastaFul"), but Docker/GHCR repository names MUST be
+      # lowercase — buildx rejected the tag outright ("repository name must
+      # be lowercase"). The GitHub Actions expression language has no
+      # built-in lower-case function, so this needs a real shell step.
+      - name: Compute lowercase image name (GHCR requires lowercase)
+        id: image
+        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+      - name: Build and push multi-arch sandbox image
+        uses: docker/build-push-action@v6
+        with:
+          context: .harness-sandbox/docker
+          file: .harness-sandbox/docker/Dockerfile.sandbox
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ steps.image.outputs.owner }}/agents-harness-sandbox:latest
+            ghcr.io/${{ steps.image.outputs.owner }}/agents-harness-sandbox:${{ github.sha }}

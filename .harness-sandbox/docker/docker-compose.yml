@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+  sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    volumes:
+      - ../workspace:/workspace
+      - ~/.aws:/root/.aws:ro
+      - ~/.ssh:/root/.ssh:ro
+    environment:
+      - SONAR_HOST_URL=http://sonarqube:9000
+      - SONAR_TOKEN=${SONAR_TOKEN:-}
+    networks:
+      - harness
+    stdin_open: true
+    tty: true
+
+  sonarqube:
+    image: sonarqube:community
+    ports:
+      - "9000:9000"
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+    volumes:
+      - sonar_data:/opt/sonarqube/data
+      - sonar_logs:/opt/sonarqube/logs
+    networks:
+      - harness
+
+networks:
+  harness:
+    driver: bridge
+
+volumes:
+  sonar_data:
+  sonar_logs:

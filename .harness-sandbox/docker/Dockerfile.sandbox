@@ -1,0 +1,279 @@
+FROM node:20-alpine
+
+# TARGETARCH is auto-populated by BuildKit/buildx per target platform
+# ("amd64" or "arm64" — Docker's normalized names). A plain `docker build`
+# (no --platform/buildx) still sets it to the host arch, so single-arch
+# local builds are unaffected. Used below to pick the right release asset
+# for every tool that ships separate per-arch binaries — added per user
+# decision (QUESTIONS.pt-BR.md #14): "se for possível, possibilitar o build
+# para ARM". Every arm64 asset URL used below was verified live (curl -o
+# /dev/null -w '%{http_code}' = 200) against each tool's CURRENTLY PINNED
+# version before being added — not guessed. sonar-scanner's version had to
+# be bumped (see its section) because its old pin predates arm64 support
+# entirely under any filename.
+ARG TARGETARCH
+
+RUN apk add --no-cache \
+    bash curl git python3 py3-pip jq unzip tar openssl gcompat \
+    opentofu
+# `gcompat` added for the infracost binary below, which is dynamically
+# linked against glibc (`Requesting program interpreter:
+# /lib64/ld-linux-x86-64.so.2`, confirmed via `readelf -l`) — Alpine is
+# musl-based and has no glibc at all, so without this the binary exists,
+# has the right ELF machine type, passes every earlier check, and still
+# fails to execute with a misleading "not found" (the kernel can't find
+# the requested interpreter path, and the shell surfaces that as if the
+# command itself didn't exist). `gcompat` provides that interpreter path.
+# SECOND PRE-EXISTING BUG FOUND AND FIXED HERE: this line used to also run
+# `npm install -g npm@latest`, which — on a `node:20-alpine` base — pulls
+# whatever npm major is newest at build time (currently 12.x, requires
+# Node >=22/24/26). `node:20-alpine` ships Node v20.20.2, so that install
+# failed with EBADENGINE every time this Dockerfile was built. Node 20
+# already bundles npm 10.8.2, which is sufficient for every `npm install
+# -g <tool>` step later in this file — the "upgrade" step was not just
+# broken, it was unnecessary. Removed rather than pinned to a fake-newer
+# version, since nothing downstream needs npm >10.
+#
+# NOTE: added `unzip tar` explicitly above — the SonarQube scanner step below
+# already relied on `unzip` with no apk package declaring it; that was a
+# latent gap (worked only because the base image happened to carry it),
+# fixed here as an incidental find while touching this file for the gate
+# hardening initiative (see repo RESULT.md).
+#
+# CRITICAL PRE-EXISTING BUG FOUND AND FIXED HERE: this line used to also
+# list `terraform` as an apk package. It never existed in Alpine's repos
+# (HashiCorp Terraform is BUSL-licensed, not distributed via apk — only
+# the open-source `opentofu` fork is, confirmed live: `apk search -x
+# terraform` returns nothing, `apk search -x opentofu` returns
+# opentofu-1.10.6-r8 on Alpine 3.23). This means `docker build` of this
+# EXACT Dockerfile has been failing at this very step since it was
+# written — the sandbox image most likely never built successfully before
+# this pass. Real Terraform is installed properly below via HashiCorp's
+# official binary release instead.
+ARG TERRAFORM_VERSION=1.16.1
+RUN curl -sSfLo /tmp/terraform.zip \
+    https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_${TARGETARCH}.zip \
+    && unzip /tmp/terraform.zip -d /usr/local/bin \
+    && chmod +x /usr/local/bin/terraform \
+    && rm /tmp/terraform.zip
+
+# Install IaC security tools
+RUN pip3 install --break-system-packages checkov
+# THIRD PRE-EXISTING BUG (multi-part) FOUND AND FIXED HERE: tfsec's own
+# official install script has TWO separate problems on this Alpine base:
+# (1) it resolves "latest" via `api.github.com`, which is rate-limited
+# (60 req/hr unauthenticated — exhausted during this session's own
+# verification work) and fails with a confusing unrelated-looking error
+# when that happens; (2) even when given a pinned version to skip that,
+# its checksum step calls `sha256sum -c checksum.txt --quiet`, and
+# Alpine's busybox `sha256sum` does not implement GNU coreutils'
+# `--quiet` flag at all (only `-s`) — so the script fails on Alpine
+# regardless of the version/API issue. Rather than patch upstream's
+# script, switched to a direct binary download (same pattern already
+# used for kube-score, gitleaks, osv-scanner, kube-bench, etc. in this
+# file) — verified downloading and extracting correctly before pinning.
+ARG TFSEC_VERSION=v1.28.14
+RUN curl -sSfL -o /usr/local/bin/tfsec \
+    https://github.com/aquasecurity/tfsec/releases/download/${TFSEC_VERSION}/tfsec-linux-${TARGETARCH} \
+    && chmod +x /usr/local/bin/tfsec
+# FOURTH PRE-EXISTING BUG FOUND AND FIXED HERE: kube-score's install.sh no
+# longer exists upstream at all (confirmed: both `master` and `main`
+# branches 404 on raw.githubusercontent.com, and the repo's own release
+# page has no script — only prebuilt binaries). This line has been dead
+# since whenever upstream removed that script. Replaced with a direct
+# binary download from the real release assets (same pattern as every
+# other non-curl-installer tool in this file).
+ARG KUBE_SCORE_VERSION=1.20.0
+RUN curl -sSfL -o /tmp/kube-score.tar.gz \
+    https://github.com/zegl/kube-score/releases/download/v${KUBE_SCORE_VERSION}/kube-score_${KUBE_SCORE_VERSION}_linux_${TARGETARCH}.tar.gz \
+    && tar -xzf /tmp/kube-score.tar.gz -C /usr/local/bin kube-score \
+    && chmod +x /usr/local/bin/kube-score \
+    && rm /tmp/kube-score.tar.gz
+
+# Install trivy
+RUN curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+# --- Security gates (Phase 2 — see skills/security-gates/) ---
+# Versions verified live against GitHub releases on 2026-09-03 (not from
+# training-data memory — see repo RESULT.md for the verification method).
+ARG GITLEAKS_VERSION=8.30.1
+# gitleaks names its amd64 asset "x64" but its arm64 asset "arm64" —
+# inconsistent, needs an explicit mapping (both verified live: 200 for
+# gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz and
+# gitleaks_${GITLEAKS_VERSION}_linux_arm64.tar.gz).
+RUN GITLEAKS_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "x64") \
+    && curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${GITLEAKS_ARCH}.tar.gz \
+    | tar -xz -C /usr/local/bin gitleaks
+
+# semgrep — PyPI ships musllinux wheels for both x86_64 and aarch64, Alpine-compatible either way
+RUN pip3 install --break-system-packages semgrep
+
+ARG OSV_SCANNER_VERSION=2.5.1
+RUN curl -sSfL -o /usr/local/bin/osv-scanner \
+    https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_${TARGETARCH} \
+    && chmod +x /usr/local/bin/osv-scanner
+
+RUN curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+RUN curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+
+# kube-bench — CLI only (actual checks need a live cluster, see skills/security-gates/SKILL.md)
+ARG KUBE_BENCH_VERSION=0.16.0
+RUN curl -sSfL https://github.com/aquasecurity/kube-bench/releases/download/v${KUBE_BENCH_VERSION}/kube-bench_${KUBE_BENCH_VERSION}_linux_${TARGETARCH}.tar.gz -o /tmp/kube-bench.tar.gz \
+    && tar -xzf /tmp/kube-bench.tar.gz -C /usr/local/bin kube-bench \
+    && rm /tmp/kube-bench.tar.gz
+# RESOLVED (QUESTIONS.pt-BR.md #14, 2026-09): gitleaks/osv-scanner/kube-bench
+# above previously had no arch-detection, unlike tfsec/kube-score/trivy/
+# syft/grype. Now use $TARGETARCH (gitleaks needs an explicit x64/arm64
+# mapping since its amd64 asset name is "x64", not "amd64" — see its RUN
+# block above). All arm64 URLs verified live (200) at the pinned versions
+# before this change.
+
+# --- Infra quality gates (Phase 4 — see skills/infra-quality-gates/) ---
+# Versions below verified live against GitHub on 2026-09-03 where noted;
+# `terraform-docs` version corrected from the implementing sub-agent's
+# unverified guess (it had no network access to check; v0.19.0 was wrong,
+# real current release is v0.24.0 — verified here via redirect lookup).
+RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+
+ARG TERRAFORM_DOCS_VERSION=0.24.0
+RUN curl -sSfLo /tmp/terraform-docs.tar.gz https://terraform-docs.io/dl/v${TERRAFORM_DOCS_VERSION}/terraform-docs-v${TERRAFORM_DOCS_VERSION}-linux-${TARGETARCH}.tar.gz \
+    && tar -xzf /tmp/terraform-docs.tar.gz -C /tmp \
+    && mv /tmp/terraform-docs /usr/local/bin/terraform-docs \
+    && chmod +x /usr/local/bin/terraform-docs \
+    && rm /tmp/terraform-docs.tar.gz
+
+# SIXTH BUG (historical): this originally used GitHub's
+# `/latest/download/<literal-filename>` redirect with a GUESSED filename
+# for all 4 tools below. polaris/pluto's real assets embed the version in
+# the filename — fixed and pinned then. kubeconform/kube-linter were left
+# on `/latest/` (open question #12/#13, drift risk). RESOLVED 2026-09
+# (QUESTIONS.pt-BR.md #12/#13): both now pinned to their real current
+# versions (verified live via GitHub API), same pattern as every other
+# tool in this file — see `renovate.json` at repo root for the mechanism
+# that now tracks all of these for periodic, review-gated bumps instead of
+# either drifting silently (`/latest/`) or going stale silently (pinned +
+# forgotten).
+ARG POLARIS_VERSION=10.2.2
+RUN curl -sSfLo /tmp/polaris.tar.gz \
+    https://github.com/FairwindsOps/polaris/releases/download/v${POLARIS_VERSION}/polaris_${POLARIS_VERSION}_linux_${TARGETARCH}.tar.gz \
+    && tar -xzf /tmp/polaris.tar.gz -C /usr/local/bin polaris \
+    && chmod +x /usr/local/bin/polaris \
+    && rm /tmp/polaris.tar.gz
+
+ARG PLUTO_VERSION=5.24.3
+RUN curl -sSfLo /tmp/pluto.tar.gz \
+    https://github.com/FairwindsOps/pluto/releases/download/v${PLUTO_VERSION}/pluto_${PLUTO_VERSION}_linux_${TARGETARCH}.tar.gz \
+    && tar -xzf /tmp/pluto.tar.gz -C /usr/local/bin pluto \
+    && chmod +x /usr/local/bin/pluto \
+    && rm /tmp/pluto.tar.gz
+
+ARG KUBECONFORM_VERSION=0.8.0
+RUN curl -sSfLo /tmp/kubeconform.tar.gz https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-${TARGETARCH}.tar.gz \
+    && tar -xzf /tmp/kubeconform.tar.gz -C /usr/local/bin kubeconform \
+    && chmod +x /usr/local/bin/kubeconform \
+    && rm /tmp/kubeconform.tar.gz
+
+# kube-linter — closes the gap: cited in harness-infra.md rule 3 since before
+# this initiative, never actually installed until now. Its amd64 asset has
+# NO arch suffix at all ("kube-linter-linux.tar.gz"), while arm64 does
+# ("kube-linter-linux_arm64.tar.gz") — inconsistent, needs a mapping (both
+# verified live: 200).
+ARG KUBE_LINTER_VERSION=0.8.3
+RUN KL_FILE=$([ "$TARGETARCH" = "arm64" ] && echo "kube-linter-linux_arm64.tar.gz" || echo "kube-linter-linux.tar.gz") \
+    && curl -sSfLo /tmp/kube-linter.tar.gz https://github.com/stackrox/kube-linter/releases/download/v${KUBE_LINTER_VERSION}/${KL_FILE} \
+    && tar -xzf /tmp/kube-linter.tar.gz -C /usr/local/bin kube-linter \
+    && chmod +x /usr/local/bin/kube-linter \
+    && rm /tmp/kube-linter.tar.gz
+
+# helm — was COMPLETELY ABSENT before this pass, despite harness-infra.md
+# rule 3 already citing `helm lint`/`helm template` as verification tools
+# (a pre-existing gap, surfaced not introduced by this initiative — see
+# RESULT.md). Also required by helm-unittest below.
+RUN curl -s https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+RUN helm plugin install https://github.com/helm-unittest/helm-unittest.git
+
+# Go toolchain — required for terratest (per-project test files, see
+# skills/infra-quality-gates/SKILL.md — this only provides the toolchain).
+RUN apk add --no-cache go
+
+# --- Policy-as-code (Phase 1 — see skills/policy-gates/) ---
+# Versions verified live against GitHub on 2026-09-03.
+ARG OPA_VERSION=1.20.1
+RUN curl -sSfL -o /usr/local/bin/opa \
+    https://openpolicyagent.org/downloads/v${OPA_VERSION}/opa_linux_${TARGETARCH}_static \
+    && chmod +x /usr/local/bin/opa
+
+# conftest names its amd64 asset "x86_64" but its arm64 asset "arm64" —
+# inconsistent, needs an explicit mapping (both verified live: 200).
+ARG CONFTEST_VERSION=0.69.0
+RUN CONFTEST_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "x86_64") \
+    && curl -sSfL https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_${CONFTEST_ARCH}.tar.gz \
+    | tar -xz -C /usr/local/bin conftest
+
+# --- Cost gate (Phase 5 — see skills/cost-gates/) ---
+# Version verified live against GitHub on 2026-09-03. Needs INFRACOST_API_KEY
+# at runtime (not baked into the image) — see .specs/QUESTIONS.md, not
+# provisioned by this pass.
+# FIFTH BUG, caught before a build attempt this time (checked proactively
+# instead of waiting to fail): `infracost/infracost` is the OLD, pre-2.0
+# repo — its own install script says so explicitly ("This script only
+# installs versions <1.0.0 ... For Infracost CLI >=2.0.0, see
+# github.com/infracost/cli"). The real current project is
+# `infracost/cli` (currently v2.16.2). Using the correct repo's install
+# script instead. It defaults to the literal string "latest" baked into
+# the download URL — verified this does NOT call api.github.com at all
+# (unlike the old script), so it's not exposed to the same rate-limit
+# fragility that hit tfsec above. No version ARG pinned deliberately:
+# there's no api.github.com call to avoid, and guessing another version
+# string cost real time twice already this session (terraform, tfsec) —
+# "latest" here is resolved by infracost's own CDN redirect, not a guess.
+RUN curl -fsSL https://raw.githubusercontent.com/infracost/cli/main/scripts/install.sh -o /tmp/infracost-install.sh \
+    && chmod +x /tmp/infracost-install.sh \
+    && sh /tmp/infracost-install.sh \
+    && rm /tmp/infracost-install.sh
+
+# SonarQube scanner
+# BUG (QUESTIONS.md #20, found during original gate-hardening pass, fixed here):
+# sonar-scanner-cli ships a BUNDLED jre under
+# sonar-scanner-*/jre/, and its launcher script hardcodes
+# `use_embedded_jre=true` by default, which makes it export
+# `JAVA_HOME="$sonar_scanner_home/jre"` unconditionally — that bundled JRE
+# is glibc-linked (`Unable to load jimage library: .../libjimage.so`),
+# and Alpine has no glibc at all (musl-based). `gcompat` (added earlier in
+# this file for the much simpler `infracost` static binary) is not a full
+# glibc and is not enough for a real JVM — confirmed via SonarSource's own
+# community forum: the documented fix for Alpine is to disable the
+# embedded JRE and use a real musl-native JRE from Alpine's own apk repo
+# instead, not to chase glibc compatibility for the bundled one. Deliberately
+# scoped to sonar-scanner alone (not a glibc shim or base-image swap
+# affecting every other tool in this image) since nothing else here needs a
+# JVM.
+RUN apk add --no-cache openjdk17-jre-headless
+# VERSION BUMP REQUIRED FOR ARM64 (QUESTIONS.pt-BR.md #14, 2026-09): the old
+# pin (5.0.1.3006) predates SonarScanner CLI's per-arch release layout
+# entirely — no arm64/aarch64 asset exists under ANY filename for that
+# version. Linux aarch64 builds only exist from v6.1 onward (confirmed via
+# SonarSource docs); bumped to 8.1.0.6389 (current at the time of this
+# change) and verified live (200) for BOTH
+# sonar-scanner-cli-8.1.0.6389-linux-x64.zip and
+# sonar-scanner-cli-8.1.0.6389-linux-aarch64.zip, including confirming the
+# extracted top-level directory name pattern
+# (sonar-scanner-${VERSION}-linux-${ARCH}/) before wiring the sed/ln paths
+# below to it — not guessed.
+ARG SONAR_SCANNER_VERSION=8.1.0.6389
+RUN SONAR_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "aarch64" || echo "x64") \
+    && curl -sfL "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-${SONAR_SCANNER_VERSION}-linux-${SONAR_ARCH}.zip" -o /tmp/sonar.zip \
+    && unzip /tmp/sonar.zip -d /opt \
+    && sed -i 's/use_embedded_jre=true/use_embedded_jre=false/' /opt/sonar-scanner-${SONAR_SCANNER_VERSION}-linux-${SONAR_ARCH}/bin/sonar-scanner \
+    && rm -rf /opt/sonar-scanner-${SONAR_SCANNER_VERSION}-linux-${SONAR_ARCH}/jre \
+    && ln -s /opt/sonar-scanner-${SONAR_SCANNER_VERSION}-linux-${SONAR_ARCH}/bin/sonar-scanner /usr/local/bin/sonar-scanner \
+    && rm /tmp/sonar.zip
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+
+WORKDIR /workspace
+ENV SONAR_HOST_URL=http://sonarqube:9000
+
+COPY scripts/sonar-scan.sh /usr/local/bin/sonar-scan
+RUN chmod +x /usr/local/bin/sonar-scan
+
+ENTRYPOINT ["/bin/bash"]
