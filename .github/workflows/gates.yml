@@ -22,6 +22,18 @@
 
 name: Harness Gates
 
+# BUG FOUND AND FIXED via a real product-repo rollout (infra-platform,
+# 2026-09-08): this workflow had no top-level `permissions:` block, so
+# every job got the repo's DEFAULT GITHUB_TOKEN permissions (often broad).
+# checkov (running for real for the first time here, against actual
+# Terraform + this very workflow file) correctly flagged this:
+# CKV2_GHA_1 "Ensure top-level permissions are not set to write-all".
+# Least-privilege default at the workflow level; `publish-image`'s own
+# job-level `permissions:` (packages: write) already overrides this for
+# just that job, per GitHub Actions' own precedence rules.
+permissions:
+  contents: read
+
 on:
   pull_request:
   push:
@@ -207,9 +219,23 @@ jobs:
       # lowercase — buildx rejected the tag outright ("repository name must
       # be lowercase"). The GitHub Actions expression language has no
       # built-in lower-case function, so this needs a real shell step.
-      - name: Compute lowercase image name (GHCR requires lowercase)
+      #
+      # BUG FOUND AND FIXED via a real product-repo rollout (microgrow,
+      # 2026-09-08, 9th real bug this session): the image name was
+      # hardcoded to the literal string "agents-harness-sandbox" — correct
+      # only in the agents-harness repo itself. Every OTHER project this
+      # template gets installed into inherited that exact same literal
+      # name, so its workflow tried to push to a GHCR package already
+      # owned by (created in) agents-harness — denied with
+      # "permission_denied: read_package", since GHCR ties package write
+      # access to the repo that created it, not just the account. Fixed by
+      # deriving the image name from the actual repo (also lowercased, same
+      # reason as the owner).
+      - name: Compute lowercase image owner+name (GHCR requires lowercase; name must be per-repo, not hardcoded)
         id: image
-        run: echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+          echo "name=$(echo '${{ github.event.repository.name }}' | tr '[:upper:]' '[:lower:]')-sandbox" >> "$GITHUB_OUTPUT"
       - name: Build and push multi-arch sandbox image
         uses: docker/build-push-action@v6
         with:
@@ -218,5 +244,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ steps.image.outputs.owner }}/agents-harness-sandbox:latest
-            ghcr.io/${{ steps.image.outputs.owner }}/agents-harness-sandbox:${{ github.sha }}
+            ghcr.io/${{ steps.image.outputs.owner }}/${{ steps.image.outputs.name }}:latest
+            ghcr.io/${{ steps.image.outputs.owner }}/${{ steps.image.outputs.name }}:${{ github.sha }}
