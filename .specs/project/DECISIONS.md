@@ -319,3 +319,12 @@ ok`, valor real `5ms`) em 2 ciclos de avaliação consecutivos.
 Lição registrada: query embutida como string numa linguagem diferente do arquivo host precisa de
 verificação da AVALIAÇÃO REAL depois de qualquer edição no artefato final, não só do fragmento
 testado isoladamente antes.
+
+## D-2026-09-09-5: SMTP dos alertas fica no Resend (não Gmail) — não é prioridade agora
+Usuário decidiu manter tudo centralizado no Resend (já usado pelo rastafinancas, mesmo domínio
+verificado `rastaful.dev`) em vez de configurar app password do Gmail pro SMTP do Grafana.
+Explicitamente marcado como NÃO prioridade agora — não vou configurar isso nesta rodada, fica
+registrado pra quando o usuário pedir. Quando for feito: trocar `GF_SMTP_HOST`/`GF_SMTP_FROM_ADDRESS`
+em `platform/docker-compose.yml`/`.env` pro relay SMTP do Resend (`smtp.resend.com`) + adicionar
+`GF_SMTP_USER`/`GF_SMTP_PASSWORD` (API key do Resend) — hoje não existe nenhum dos dois, nem pro
+Gmail nem pro Resend, é por isso que a notificação nunca funcionou.

@@ -237,6 +237,17 @@ Usuário reportou compose de observabilidade quebrado + pediu correção do /met
   empurrado pro Vault.
 Ver D-2026-09-09-1 em DECISIONS.md, detalhe completo em `.specs/audit/execution.md`.
 
+## Sessão 2026-09-09 (continuação 3) — SMTP=Resend (decisão) + rastafinancas apps/web + lint
+Usuário: SMTP dos alertas fica no Resend, não Gmail — não é prioridade agora, registrado (D-2026-09-09-5), nada configurado.
+Itens 2/3/4 atacados: (2) `rastafinancas` apps/web tinha 70 erros reais de TS (não ~150 —
+número inflado por invocação errada de tsc numa sessão anterior), causa raiz concentrada e
+corrigida; (3) lint 105→61 warnings + 2 bugs reais de produto achados e corrigidos
+(`userSignupsTotal` nunca incrementado, dead code em `extrato-csv.ts`); bônus: fix da rede
+`rastafinancas_net` precisou de uma 2ª correção (a 1ª tinha invertido a direção sem checar o
+label real do Docker). (4) rollout de gates pra microgrow/artists-booking/infra-platform ainda
+não iniciado nesta sessão. Detalhe completo em `rastafinancas/.specs/` (DECISIONS.md/STATE.md
+mesma data) — trabalho de código foi lá, não aqui.
+
 ## Sessão 2026-09-09 (continuação) — restart:always (pendência 1) + Vault + achados registrados
 Usuário esclareceu: ele mesmo para o Docker Desktop pra jogar (não foi um bug de infra) e pediu
 resolver via config do compose em vez de script de boot. Feito:
