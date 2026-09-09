@@ -5,6 +5,15 @@ name: Reusable CI (lint, test, tsc, npm audit, docker build, trivy)
 # infra-platform ADR 006 (CI/CD split) and .specs/features/
 # security-hardening-phase1/spec.md (Task 3).
 
+# SECURITY FIX (checkov CKV2_GHA_1, applied 2026-09-09 via harness-gates
+# rollout — see .specs/features/harness-gates-rollout/spec.md): least-
+# privilege top-level permissions. Safe here — every step is read-only
+# (checkout, install, lint/tsc/test/audit, local docker build, trivy scan)
+# with no push/deploy of any kind (Coolify's job per ADR 006), and no
+# caller ci.yml sets `secrets: inherit` or overrides permissions.
+permissions:
+  contents: read
+
 on:
   workflow_call:
     inputs:
