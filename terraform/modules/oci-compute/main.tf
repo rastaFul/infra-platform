@@ -115,6 +115,30 @@ resource "oci_core_instance" "this" {
     user_data           = base64encode(templatefile("${path.module}/cloud-init.yaml.tpl", {}))
   }
 
+  # SECURITY FIX (checkov CKV_OCI_4/CKV_OCI_5, applied 2026-09-09 — see
+  # .specs/features/harness-gates-rollout/spec.md): both fields verified
+  # via the official provider docs before adding — Optional, Updatable,
+  # ForceNew: No (confirmed via docs.oracle.com/.../core_instance.html),
+  # so `terraform apply` updates this existing instance in place, it does
+  # NOT destroy/recreate it. `launch_options.is_pv_encryption_in_transit_enabled`
+  # is specifically the UPDATE-time field (the top-level argument of the
+  # same name is deprecated-at-create only, not applicable here since this
+  # instance already exists).
+  launch_options {
+    is_pv_encryption_in_transit_enabled = true
+  }
+
+  # are_legacy_imds_endpoints_disabled=true forces IMDSv2-only. Checked
+  # for the known gotcha (a reported case where this setting broke
+  # cloud-init on FIRST boot for some images/cloud-init versions) — not
+  # applicable here: this instance already completed its first boot
+  # historically, and Ubuntu 24.04's bundled cloud-init has supported
+  # OCI's v2 metadata endpoint for years, so a future reboot is not
+  # expected to regress this.
+  instance_options {
+    are_legacy_imds_endpoints_disabled = true
+  }
+
   lifecycle {
     ignore_changes = [source_details[0].source_id] # don't force-replace on new image releases
   }
