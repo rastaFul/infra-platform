@@ -7,8 +7,21 @@ cd "$DIR"
 RESULT='{"timestamp":"'$(date -Iseconds)'","gates":{},"overall":"PASS"}'
 
 # tsc
+# BUG FOUND AND FIXED via a real product-repo rollout (artists-booking,
+# 2026-09-08): `grep -c PATTERN || echo 0` is broken — `grep -c` ALWAYS
+# prints a valid count to stdout (including "0"), but its own exit code is
+# 1 whenever the count is zero (not an error, just "no matches" — the
+# NORMAL/GOOD case here, zero tsc errors). So on a clean run, this used to
+# both print grep's own "0" AND trigger the `|| echo 0` fallback, producing
+# the literal two-line string "0\n0" instead of "0" — which broke the
+# python3 JSON embed downstream (`'errors':0\n0` is invalid syntax) and,
+# under `set -e` in the CALLING script (run-final.sh), silently crashed
+# the entire gate chain with zero output. Fixed: `|| true` (adds nothing)
+# instead of `|| echo 0` (which duplicates), plus an explicit empty-string
+# guard for the genuine-hard-error case where grep prints nothing at all.
 TSC_OUT=$(npx tsc --noEmit 2>&1) && TSC_STATUS="PASS" || TSC_STATUS="FAIL"
-TSC_ERRORS=$(echo "$TSC_OUT" | grep -c "error TS" 2>/dev/null || echo 0)
+TSC_ERRORS=$(echo "$TSC_OUT" | grep -c "error TS" 2>/dev/null || true)
+[ -z "$TSC_ERRORS" ] && TSC_ERRORS=0
 RESULT=$(echo "$RESULT" | python3 -c "import sys,json;d=json.load(sys.stdin);d['gates']['tsc']={'status':'$TSC_STATUS','errors':$TSC_ERRORS};print(json.dumps(d))")
 
 # eslint

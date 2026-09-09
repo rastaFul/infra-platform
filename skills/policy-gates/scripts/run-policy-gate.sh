@@ -20,7 +20,12 @@ if [ -n "$TF_PLAN_JSON" ] && [ -f "$TF_PLAN_JSON" ]; then
     TF_STATUS="PASS"
   else
     TF_STATUS="FAIL"
-    TF_FAILS=$(grep -c "^FAIL" /tmp/conftest-tf.out 2>/dev/null || echo 0)
+    # See run-gates.sh (code-gates) for why `|| echo 0` is wrong for
+    # `grep -c`: it always prints a valid count even when its own exit
+    # code is 1 (zero matches, not an error), so `|| echo 0` duplicates
+    # the output instead of defaulting it.
+    TF_FAILS=$(grep -c "^FAIL" /tmp/conftest-tf.out 2>/dev/null || true)
+    [ -z "$TF_FAILS" ] && TF_FAILS=0
   fi
 fi
 
@@ -30,7 +35,8 @@ if [ -n "$K8S_MANIFEST_DIR" ] && [ -d "$K8S_MANIFEST_DIR" ]; then
     K8S_STATUS="PASS"
   else
     K8S_STATUS="FAIL"
-    K8S_FAILS=$(grep -c "^FAIL" /tmp/conftest-k8s.out 2>/dev/null || echo 0)
+    K8S_FAILS=$(grep -c "^FAIL" /tmp/conftest-k8s.out 2>/dev/null || true)
+    [ -z "$K8S_FAILS" ] && K8S_FAILS=0
   fi
 fi
 
