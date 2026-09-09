@@ -306,3 +306,16 @@ recarregado com dashboard v4 + 6 alert rules de rastafinancas confirmadas via AP
 502 depois de tudo. Ver `.specs/audit/execution.md` sessão 2026-09-09 pro detalhe completo,
 incluindo o achado novo não corrigido (lógica de `mean()` sobre contador cumulativo no alerta de
 latência é aproximada, pré-existente, fora do pedido desta rodada).
+
+## D-2026-09-09-4: `rasta-latency-p95` corrigido pra p95 real (bucket-based)
+Usuário pediu pra atacar o achado registrado em D-2026-09-09-3. Query trocada de `mean()` sobre o
+field `sum` (cumulativo, não é latência média real) pra quantil calculado a partir dos buckets do
+histograma — mesma técnica já testada no dashboard `rasta-api-performance.json`.
+Bug real cometido e corrigido na hora: comentário `#` (não é sintaxe Flux, que usa `//`) dentro da
+query embutida no YAML quebrou a avaliação real do alerta (`health: error`) — só detectado
+verificando a avaliação de verdade via API do Grafana, não pela validação de sintaxe do YAML em
+si (que não valida o conteúdo da string de query Flux). Corrigido, reconfirmado saudável (`health:
+ok`, valor real `5ms`) em 2 ciclos de avaliação consecutivos.
+Lição registrada: query embutida como string numa linguagem diferente do arquivo host precisa de
+verificação da AVALIAÇÃO REAL depois de qualquer edição no artefato final, não só do fragmento
+testado isoladamente antes.

@@ -282,3 +282,30 @@ Usuário pediu explicitamente resolver os 3 achados anteriores.
 
 ### Gate de qualidade de infra (final desta rodada)
 `skills/infra-quality-gates/scripts/run-infra-quality.sh .`: `overall: PASS` — tflint/kubeconform/pluto `SKIPPED` (sem `.tf`/manifests K8s; mudanças foram docker-compose YAML, Grafana dashboard/alert JSON+YAML, e código TypeScript/Next.js — todos já gated por seus próprios validadores nativos: `docker compose config`, `python3 -m json.tool`, `yaml.safe_load`, `tsc`/`vitest`/`jest`/`eslint`/`next build`).
+
+## Task: corrigir achado novo — `rasta-latency-p95` usava `mean()` sobre contador cumulativo — 2026-09-09
+Pedido do usuário: atacar o achado registrado na task anterior (a lógica do alerta de latência do
+rastafinancas era uma aproximação, não uma p95 real).
+- Substituída a query Flux de `mean()` sobre o field `sum` (cumulativo — tirar a média de um
+  contador que só cresce não é latência média nenhuma) pela MESMA técnica de quantil-por-bucket já
+  testada no dashboard `rasta-api-performance.json`: soma os buckets do histograma entre todas as
+  rotas/métodos/status, pivota num único row, acha o menor boundary cuja contagem cumulativa
+  cobre 95% do total.
+- **Bug real introduzido e corrigido na mesma sessão**: usei comentário estilo `#` (Python/shell)
+  dentro da query Flux embutida no YAML — Flux usa `//`, não `#`, pra comentário. Descoberto não no
+  teste manual via API do InfluxDB (que não tinha os comentários), mas só depois, checando a
+  avaliação REAL do alerta via `GET /api/prometheus/grafana/api/v1/rules` — `health: "error"`,
+  `lastError` mostrando o erro de parse Flux completo. Corrigido (`#` → `//`), Grafana reiniciado,
+  reconfirmado saudável em 2 ciclos de avaliação (`interval: 2m`) consecutivos.
+- Verificação externa real (evaluation de verdade, não só "YAML carregou"): `health: "ok"`,
+  `lastError: None`, valor retornado `5e+00` (5ms) — plausível dado o tráfego atual (só
+  `/health`/`/metrics` sendo chamados). Confirmado estável em 2 avaliações consecutivas (~2min de
+  intervalo), não uma leitura isolada.
+- Status: DONE. Lição registrada: pra alertas/dashboards com query embutida numa linguagem
+  diferente do arquivo host (Flux dentro de YAML, PromQL dentro de JSON etc.), validar sintaxe do
+  arquivo host (`yaml.safe_load`/`json.load`) NÃO garante que a query interna é válida — só a
+  avaliação real (ou teste direto contra o datasource) pega isso. Validado manualmente contra a API
+  do InfluxDB ajuda, mas só cobre exatamente o texto testado — comentários/formatação adicionados
+  depois do teste manual, na hora de montar o YAML final, não foram re-testados até a avaliação
+  real do Grafana pegar o erro. Prática a manter: depois de montar o artefato final (YAML/JSON),
+  sempre conferir a avaliação/execução real de novo, não só o teste do fragmento isolado.

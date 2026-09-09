@@ -134,11 +134,40 @@ groups:
               type: flux
               refId: A
               query: |
-                from(bucket: "rastafinancas")
+                // p95 real, calculado a partir dos buckets do histograma (não
+                // mean() sobre o field "sum", que é um contador cumulativo --
+                // tirar a média de um contador que só cresce não é uma latência
+                // média real. Achado 2026-09-09, ver infra-platform
+                // .specs/audit/execution.md. Mesma técnica usada no dashboard
+                // rasta-api-performance.json (bucket com menor boundary cuja
+                // contagem cumulativa >= 95% do total).
+                buckets = from(bucket: "rastafinancas")
                   |> range(start: -5m)
                   |> filter(fn: (r) => r._measurement == "http_request_duration_ms")
-                  |> filter(fn: (r) => r._field == "sum")
-                  |> mean()
+                  |> filter(fn: (r) => r._field != "sum" and r._field != "count")
+                  |> last()
+                  |> group(columns: ["_field"])
+                  |> sum()
+                  |> group()
+                  |> pivot(rowKey: [], columnKey: ["_field"], valueColumn: "_value")
+
+                buckets
+                  |> map(fn: (r) => {
+                      total = float(v: r["+Inf"])
+                      target = total * 0.95
+                      p = if total == 0.0 then 0.0
+                        else if float(v: r["5"]) >= target then 5.0
+                        else if float(v: r["10"]) >= target then 10.0
+                        else if float(v: r["25"]) >= target then 25.0
+                        else if float(v: r["50"]) >= target then 50.0
+                        else if float(v: r["100"]) >= target then 100.0
+                        else if float(v: r["250"]) >= target then 250.0
+                        else if float(v: r["500"]) >= target then 500.0
+                        else if float(v: r["1000"]) >= target then 1000.0
+                        else if float(v: r["2500"]) >= target then 2500.0
+                        else 5000.0
+                      return {_time: now(), _value: p}
+                    })
           - refId: C
             datasourceUid: "__expr__"
             model:
