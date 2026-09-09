@@ -197,3 +197,112 @@ Decisão/achados:
 - 3 alertas novos `artists-booking.yaml` (Prometheus/PromQL — primeiro rule file do repo usando datasource Prometheus em vez de InfluxDB/Flux, já que artists-api usa prom-client): busca-sem-resultado >90%/15min (crítico), erro 5xx em /register >5%/5min (crítico), queda de visible_ratio >20% vs média 1h (warning, heurística). Todos com `noDataState: OK`/`execErrState: OK` explícito — decisão deliberada porque as métricas de produto ainda não existem em produção (spec 53 ainda sendo implementada em paralelo no apps/api); sem isso o default (NoData->Alerting) dispararia notificação crítica falsa assim que o achado de SMTP abaixo fosse corrigido.
 - **Achado secundário, fora de escopo, registrado não corrigido**: SMTP (Gmail) do canal `platform-warning`/`platform-critical` está com credencial inválida (530 5.7.0 Authentication Required) — só descoberto porque os alertas passaram a ser avaliados de verdade pela primeira vez. Precisa de app password do Gmail ou troca de provedor SMTP; decisão do usuário.
 - Verificação externa completa: `docker compose config` PASS, `GET /api/health` (Grafana) ok a cada restart, dashboard confirmado via `GET /api/search`+`GET /api/dashboards/uid/...` (9 painéis), alertas confirmados via `GET /api/v1/provisioning/alert-rules`. Nenhum outro serviço do compose depende de `grafana` — restart sem risco de cascata, confirmado antes de agir. Detalhe completo em `.specs/audit/execution.md`.
+
+## D-2026-09-08-1: branch principal padrão `main` em vez de `master` — convenção pra todos os repos
+Contexto: `infra-platform` usava `master` (herdado, nunca decidido). Usuário pediu a troca neste
+repo e que vire padrão pra todos os projetos, não uma decisão isolada.
+Decisão: `main` é a branch principal padrão daqui pra frente, em todo repo (existentes e novos).
+Ação executada aqui: pré-checagem real (sem PR aberto, sem branch protection, sem workflow/doc
+referenciando `master` como branch — só falso-positivo de `sqlite_master` em
+`restore-from-backup.md`, não é git) → `git branch -m master main` → `git push -u origin main` →
+`gh repo edit --default-branch main` → `git push origin --delete master`. Verificado via
+`git branch -a` (só `main` local+remoto) e `gh repo view --json defaultBranchRef` (`main`
+confirmado no GitHub). Ver ADR-013.
+Escopo desta sessão: só `infra-platform` foi renomeado agora. `artists-booking`, `microgrow`,
+`rastafinancas`, `vetcare` continuam em `master` até serem tocados numa sessão futura (ADR-013
+documenta o procedimento pra aplicar em cada um quando chegar a vez, incluindo a pré-checagem
+de PR aberto/branch protection que pode tornar o rename não-trivial).
+
+## D-2026-09-08-2: varredura de todos os repos + rename onde seguro, escalado onde não
+Contexto: usuário pediu "atualizar todos que ainda estão desatualizados" (continuação de D-2026-09-08-1).
+Varredura real em todo `~/projects/` (13 diretórios, checado owner/remote/branch/PR/workflow de cada um):
+- **Achado**: `artists-booking`, `microgrow`, `rastafinancas`, `vetcare`, `agents-harness` já
+  estavam em `main` — a suposição em ADR-013 (v1) de que ainda estariam em `master` estava errada,
+  corrigida no próprio ADR com a tabela real da varredura.
+- **Renomeado agora**: `dev-environment` (rastaFul, privado, sem PR, sem workflow referenciando
+  `master`, sem `.specs` próprio) — mesmo procedimento de D-2026-09-08-1, verificado via
+  `git branch -a` + `gh repo view --json defaultBranchRef`.
+- **Escalado, não executado**: `developerFolio` (fork público ativo, `gh-pages` + branches de
+  feature, 2 workflows referenciam `master` por nome, faz deploy real de site público — rename
+  aqui não é só metadado, precisa editar workflow junto, risco maior que os outros); `tldr-projects`
+  (anomalia: já existe `main` local órfã de 1 commit não relacionada + ref remota órfã sem remote
+  configurado, working tree com mudanças não commitadas de outra frente — descartar a branch órfã
+  não é decisão do agente).
+- **Fora de escopo, não tocado**: `url-shortener` (owner `thiagomr`, não `rastaFul` — convenção
+  deste workspace não se estende a repo de outro dono sem confirmação explícita).
+Ver tabela completa em ADR-013 e `.specs/audit/execution.md`.
+
+## D-2026-09-09-1: rastafinancas observability compose (telegraf/promtail down) + vetcare /metrics
+Contexto: usuário reportou "composer de observabilidade não funcionando" + pediu correção do
+`/metrics` do vetcare. Investigação real (não suposição) achou 2 problemas independentes:
+1. `rasta-telegraf`/`rasta-promtail` estavam `Exited (255)` há ~26h por um `docker stop`
+   explícito (log: `SIGINT/SIGTERM === exiting`, não crash/OOM/rede) — nunca voltaram porque
+   `restart: unless-stopped` só resscita contêiner que estava `Up` no momento de um restart do
+   daemon Docker, não um que já tinha sido parado antes. `docker compose up -d` resolveu,
+   verificado com dado real chegando no InfluxDB e Loki (timestamps atuais, não antigos).
+2. vetcare nunca teve `/metrics` implementado (spec `APPROVED` desde 08-28, nunca executada).
+Decisão/execução: implementado em `vetcare` (repo próprio, ver DECISIONS.md de lá) + job
+`vetcare` dedicado em `platform/prometheus/prometheus.yml` (não deu pra reusar `apis-host`
+porque `metrics_path` é por job, e vetcare usa `/api/metrics` em vez de `/metrics`).
+**Achado extra no caminho**: `docker compose restart prometheus` falhou com erro de bind-mount
+órfão (bug conhecido Docker Desktop/WSL2 após edição de arquivo single-file bind-mounted fora do
+Docker) — resolvido com `--force-recreate`. Sem isso, o `prometheus.yml` novo teria ficado sem
+efeito silenciosamente; só foi pego porque verificação externa (`/-/healthy` + `/api/v1/targets`)
+é obrigatória antes de considerar a task DONE.
+Verificado: 6/6 targets Prometheus `up`, `vetcare_process_cpu_seconds_total` com dado real via
+`GET /api/v1/query`. Gap conhecido, não escondido: vetcare ainda não expõe `http_requests_total`
+(métricas HTTP por rota), então não aparece no dashboard "Golden Signals" ainda (variável
+`$service` depende dessa métrica especificamente).
+Pendência registrada, não resolvida: nenhum boot script resscita contêiner que já estava
+`Exited` antes de um restart do Docker Desktop/WSL2 — pode se repetir com qualquer sidecar
+telegraf/promtail do ecossistema. Precisa decisão do usuário sobre `wsl-boot.sh` explícito por
+compose vs. aceitar o risco residual. Ver `.specs/audit/execution.md` sessão 2026-09-09.
+
+## D-2026-09-09-2: restart:always em vez de script de boot (pendência 1 resolvida)
+Contexto: usuário esclareceu a causa real do D-2026-09-09-1 — ele mesmo para o Docker Desktop pra
+jogar, localmente, e espera que tudo volte sozinho ao reiniciar. Pediu resolver via config do
+compose, não script.
+Decisão: `restart: unless-stopped` → `restart: always` em TODOS os 7 composes reais do ecossistema
+(platform, tunnel, rastafinancas x2, microgrow, artists-booking, vetcare) — `always` resscita no
+restart do daemon Docker independente do estado do contêiner antes do shutdown (unless-stopped só
+resscita o que estava `Up`), cobrindo tanto "parei o Docker de propósito" quanto "um sidecar crashou
+sozinho antes de eu parar o Docker" (os 2 cenários reais já vistos neste projeto).
+Aplicado ao vivo via `docker compose up -d` em cada um (recria só o que mudou, sem rebuild). 31
+contêineres confirmados `Up`/saudáveis, 4/4 domínios públicos sem 502 (tunnel sobreviveu), Prometheus
+6/6 targets `up`. `wsl-boot.sh` e o comentário de cabeçalho de cada compose atualizados (citavam
+`unless-stopped` explicitamente).
+2 achados colaterais registrados, não corrigidos (fora do pedido, precisam decisão própria): (1)
+`rastafinancas_net` declarada não-external em 2 composes diferentes (frágil, funcionou por sorte de
+nome); (2) `rastafinancas-api` usa nome de métrica HTTP divergente do resto do ecossistema
+(`rasta_http_requests_total` vs `http_requests_total` esperado pelo dashboard Golden Signals) —
+seus painéis de request-rate/error-rate/latência nunca mostraram dado real, ao contrário do que
+STATE.md de 2026-08-28 registra. Ver `.specs/audit/execution.md` sessão 2026-09-09 pro detalhe.
+
+## D-2026-09-09-3: as 3 pendências resolvidas (rename métrica, rede duplicada, instrumentação HTTP vetcare)
+Contexto: usuário pediu "pode resolver as 3 pendências" (as 2 acima + a instrumentação HTTP do
+vetcare que eu tinha deliberadamente não implementado na sessão anterior).
+Decisão/execução:
+1. **rastafinancas sem prefixo `rasta_`** em `collectDefaultMetrics` e em
+   `http_requests_total`/`http_request_duration_ms` (era `_seconds`) — alinhado com
+   artists-api/microgrow-api, compatível com o Golden Signals. Métricas de produto continuam
+   prefixadas (`product-metrics.ts`, de propósito). Efeito colateral corrigido: dashboard
+   `rasta-api-performance.json` (InfluxDB) + `alerting/rastafinancas.yaml` atualizados pros novos
+   nomes — no processo, achado e corrigido um bug PRÉ-EXISTENTE e SEPARADO nos painéis P50/P95/P99
+   (measurement/field errados desde a criação do dashboard, nunca retornaram dado; nova query Flux
+   testada com dado real antes de ir pro JSON).
+2. **`rastafinancas_net`**: observability compose passou a referenciar `external: true` (dono real
+   é o compose principal do app) — warning de "rede pertence a projeto diferente" eliminado.
+3. **vetcare instrumentação HTTP real**: `src/lib/with-metrics.ts` (wrapper que só funciona dentro
+   do route handler, não do middleware — motivo já registrado em D anterior) aplicado nos 72
+   handlers HTTP de 48 `route.ts` via codemod (`scripts/wrap-routes-with-metrics.mjs`, AST do
+   TypeScript compiler API, reescrita por texto preservando formatação). `vetcare_` removido de
+   `collectDefaultMetrics` pelo mesmo motivo do rastafinancas.
+Verificação externa: gates completos nos 2 repos (tsc/vitest/jest/eslint/build real/rebuild de
+container), Prometheus confirma os 4 produtos (`artists-api`/`microgrow-api`/`rastafinancas-api`/
+`vetcare`) agora consistentes em `http_requests_total`/`process_resident_memory_bytes`, Grafana
+recarregado com dashboard v4 + 6 alert rules de rastafinancas confirmadas via API (achado à parte:
+`admin` autentica em `orgId=2` por padrão nesse Grafana multi-org — precisa header
+`X-Grafana-Org-Id: 1` explícito pra bater com o que está provisionado). 4/4 domínios públicos sem
+502 depois de tudo. Ver `.specs/audit/execution.md` sessão 2026-09-09 pro detalhe completo,
+incluindo o achado novo não corrigido (lógica de `mean()` sobre contador cumulativo no alerta de
+latência é aproximada, pré-existente, fora do pedido desta rodada).

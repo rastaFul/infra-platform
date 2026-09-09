@@ -6,6 +6,13 @@
 # merged — see docs/explanation/adr/010-platform-stack-consolidation.md.
 #
 # Start: docker compose --env-file .env up -d
+#
+# restart: always everywhere in this file (not unless-stopped, changed
+# 2026-09-09) -- local dev machine, user stops/starts Docker Desktop itself
+# (e.g. to play a game) and expects the whole stack back automatically.
+# `unless-stopped` doesn't resurrect a container that was already Exited
+# (crashed on its own) before the daemon went down; `always` does regardless.
+# See infra-platform .specs/audit/execution.md (2026-09-09).
 
 networks:
   platform_net:
@@ -60,7 +67,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
-    restart: unless-stopped
+    restart: always
 
   # ── Telemetry pipeline ────────────────────────────────────────────
   otel-collector:
@@ -84,7 +91,7 @@ services:
     # responding 200 from the host the whole time. Liveness is covered
     # instead by Prometheus's own scrape target health (job `otel-collector`
     # in prometheus.yml) — `up{job="otel-collector"}` is the real signal.
-    restart: unless-stopped
+    restart: always
 
   prometheus:
     image: prom/prometheus:v2.55.1
@@ -105,7 +112,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
-    restart: unless-stopped
+    restart: always
 
   influxdb:
     image: influxdb:2.7
@@ -130,7 +137,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
-    restart: unless-stopped
+    restart: always
 
   loki:
     image: grafana/loki:2.9.10
@@ -149,7 +156,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
-    restart: unless-stopped
+    restart: always
 
   # ── Dashboards ─────────────────────────────────────────────────────
   grafana:
@@ -188,7 +195,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
-    restart: unless-stopped
+    restart: always
 
   # ── Error tracking ─────────────────────────────────────────────────
   glitchtip-db:
@@ -207,14 +214,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+    restart: always
 
   glitchtip-redis:
     image: redis:7-alpine
     container_name: platform-glitchtip-redis
     networks:
       - platform_net
-    restart: unless-stopped
+    restart: always
 
   glitchtip:
     # Pinned (not :latest) — v4.2.4+ confirmed multi-arch/arm64, required
@@ -242,7 +249,7 @@ services:
       GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:-http://localhost:8010}
       DEFAULT_FROM_EMAIL: ${SMTP_FROM:-noreply@rastaful.dev}
       CELERY_WORKER_CONCURRENCY: 2
-    restart: unless-stopped
+    restart: always
 
   glitchtip-worker:
     image: glitchtip/glitchtip:v4.2.4
@@ -258,4 +265,4 @@ services:
       REDIS_URL: redis://platform-glitchtip-redis:6379/0
       SECRET_KEY: ${GLITCHTIP_SECRET_KEY}
       CELERY_WORKER_CONCURRENCY: 2
-    restart: unless-stopped
+    restart: always

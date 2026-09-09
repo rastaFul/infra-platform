@@ -100,7 +100,7 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_http_requests_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> derivative(unit: 1s, nonNegative: true)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"rate\")"
+          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_requests_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> derivative(unit: 1s, nonNegative: true)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"rate\")"
         }
       ]
     },
@@ -130,7 +130,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
+          "unit": "ms",
           "custom": {
             "lineWidth": 1,
             "fillOpacity": 10
@@ -145,7 +145,7 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_http_request_duration_seconds_bucket\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> quantile(q: 0.5, method: \"estimate_tdigest\", compression: 1000.0)\n  |> yield(name: \"p50\")"
+          "query": "buckets = from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_request_duration_ms\")\n  |> filter(fn: (r) => r[\"_field\"] != \"sum\" and r[\"_field\"] != \"count\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n\nbuckets\n  |> map(fn: (r) => {\n      total = float(v: r[\"+Inf\"])\n      target = total * 0.5\n      p = if total == 0.0 then 0.0\n        else if float(v: r[\"5\"]) >= target then 5.0\n        else if float(v: r[\"10\"]) >= target then 10.0\n        else if float(v: r[\"25\"]) >= target then 25.0\n        else if float(v: r[\"50\"]) >= target then 50.0\n        else if float(v: r[\"100\"]) >= target then 100.0\n        else if float(v: r[\"250\"]) >= target then 250.0\n        else if float(v: r[\"500\"]) >= target then 500.0\n        else if float(v: r[\"1000\"]) >= target then 1000.0\n        else if float(v: r[\"2500\"]) >= target then 2500.0\n        else 5000.0\n      return {_time: r._time, route: r.route, method: r.method, _value: p}\n    })\n  |> yield(name: \"p50\")"
         }
       ]
     },
@@ -175,7 +175,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
+          "unit": "ms",
           "custom": {
             "lineWidth": 1,
             "fillOpacity": 10
@@ -190,7 +190,7 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_http_request_duration_seconds_bucket\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> quantile(q: 0.95, method: \"estimate_tdigest\", compression: 1000.0)\n  |> yield(name: \"p95\")"
+          "query": "buckets = from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_request_duration_ms\")\n  |> filter(fn: (r) => r[\"_field\"] != \"sum\" and r[\"_field\"] != \"count\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n\nbuckets\n  |> map(fn: (r) => {\n      total = float(v: r[\"+Inf\"])\n      target = total * 0.95\n      p = if total == 0.0 then 0.0\n        else if float(v: r[\"5\"]) >= target then 5.0\n        else if float(v: r[\"10\"]) >= target then 10.0\n        else if float(v: r[\"25\"]) >= target then 25.0\n        else if float(v: r[\"50\"]) >= target then 50.0\n        else if float(v: r[\"100\"]) >= target then 100.0\n        else if float(v: r[\"250\"]) >= target then 250.0\n        else if float(v: r[\"500\"]) >= target then 500.0\n        else if float(v: r[\"1000\"]) >= target then 1000.0\n        else if float(v: r[\"2500\"]) >= target then 2500.0\n        else 5000.0\n      return {_time: r._time, route: r.route, method: r.method, _value: p}\n    })\n  |> yield(name: \"p95\")"
         }
       ]
     },
@@ -220,7 +220,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
+          "unit": "ms",
           "custom": {
             "lineWidth": 1,
             "fillOpacity": 10
@@ -235,7 +235,7 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_http_request_duration_seconds_bucket\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> quantile(q: 0.99, method: \"estimate_tdigest\", compression: 1000.0)\n  |> yield(name: \"p99\")"
+          "query": "buckets = from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_request_duration_ms\")\n  |> filter(fn: (r) => r[\"_field\"] != \"sum\" and r[\"_field\"] != \"count\")\n  |> aggregateWindow(every: v.windowPeriod, fn: last, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n\nbuckets\n  |> map(fn: (r) => {\n      total = float(v: r[\"+Inf\"])\n      target = total * 0.99\n      p = if total == 0.0 then 0.0\n        else if float(v: r[\"5\"]) >= target then 5.0\n        else if float(v: r[\"10\"]) >= target then 10.0\n        else if float(v: r[\"25\"]) >= target then 25.0\n        else if float(v: r[\"50\"]) >= target then 50.0\n        else if float(v: r[\"100\"]) >= target then 100.0\n        else if float(v: r[\"250\"]) >= target then 250.0\n        else if float(v: r[\"500\"]) >= target then 500.0\n        else if float(v: r[\"1000\"]) >= target then 1000.0\n        else if float(v: r[\"2500\"]) >= target then 2500.0\n        else 5000.0\n      return {_time: r._time, route: r.route, method: r.method, _value: p}\n    })\n  |> yield(name: \"p99\")"
         }
       ]
     },
@@ -297,7 +297,7 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "total = from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_http_requests_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> last()\n\nerrors = from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_http_requests_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"status_code\"] =~ /^5/)\n  |> last()\n\nunion(tables: [total, errors])\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> yield(name: \"error_rate\")"
+          "query": "total = from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_requests_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> last()\n\nerrors = from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_requests_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"status_code\"] =~ /^5/)\n  |> last()\n\nunion(tables: [total, errors])\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> yield(name: \"error_rate\")"
         }
       ]
     },
@@ -342,7 +342,7 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_http_requests_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"status_code\"] =~ /^4/)\n  |> derivative(unit: 1m, nonNegative: true)\n  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)\n  |> group(columns: [\"route\"])\n  |> yield(name: \"4xx_by_route\")"
+          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_requests_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"status_code\"] =~ /^4/)\n  |> derivative(unit: 1m, nonNegative: true)\n  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)\n  |> group(columns: [\"route\"])\n  |> yield(name: \"4xx_by_route\")"
         }
       ]
     },
@@ -387,7 +387,7 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_http_requests_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"status_code\"] =~ /^5/)\n  |> derivative(unit: 1m, nonNegative: true)\n  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)\n  |> group(columns: [\"route\"])\n  |> yield(name: \"5xx_by_route\")"
+          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_requests_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"status_code\"] =~ /^5/)\n  |> derivative(unit: 1m, nonNegative: true)\n  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)\n  |> group(columns: [\"route\"])\n  |> yield(name: \"5xx_by_route\")"
         }
       ]
     },

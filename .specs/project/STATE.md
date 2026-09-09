@@ -218,3 +218,80 @@ Usuário aprovou D1/D2/D3 (restart+validar, escopo total, replicar padrão micro
 - vetcare: promtail criado do zero — achado bug real de self-scraping (filtro sem âncora capturava o próprio promtail), corrigido.
 - artists-booking: promtail criado do zero, já com filtro ancorado desde o início.
 Ver D-2026-08-29-1 e spec (DONE). Roadmap Batch 3 do infra-platform está 100% fechado agora.
+
+## Sessão 2026-09-09 — rastafinancas observability compose + vetcare /metrics — DONE (2 pendências)
+Usuário reportou compose de observabilidade quebrado + pediu correção do /metrics do vetcare.
+- `rasta-telegraf`/`rasta-promtail` estavam `Exited` há 26h por `docker stop` explícito (log
+  confirma SIGINT/SIGTERM, não crash) — `restart:unless-stopped` não resscita contêiner já parado
+  antes de um restart do daemon. `docker compose up -d` trouxe de volta, verificado com dado real
+  novo no InfluxDB (measurements `rasta_*`) e Loki (log entry com timestamp atual).
+- vetcare `/api/metrics` implementado do zero (repo `vetcare`, ver `.specs` de lá) + job dedicado
+  em `prometheus.yml` (não deu pra reusar `apis-host`, path diferente). No caminho, achado e
+  corrigido um bug real de bind-mount órfão do Prometheus (Docker Desktop/WSL2) que teria feito o
+  `prometheus.yml` novo não ter efeito nenhum silenciosamente.
+- Verificado externamente: 6/6 targets Prometheus `up`, dado real de vetcare via `/api/v1/query`.
+- **Pendências não resolvidas, registradas**: (1) nenhum boot script resscita contêiner já
+  `Exited` antes de restart do WSL2/Docker Desktop — pode voltar a acontecer com qualquer sidecar
+  telegraf/promtail do ecossistema; (2) vetcare sem `http_requests_total` (métricas HTTP por
+  rota) — não aparece no dashboard "Golden Signals" ainda; (3) `vetcare` `METRICS_TOKEN` não
+  empurrado pro Vault.
+Ver D-2026-09-09-1 em DECISIONS.md, detalhe completo em `.specs/audit/execution.md`.
+
+## Sessão 2026-09-09 (continuação) — restart:always (pendência 1) + Vault + achados registrados
+Usuário esclareceu: ele mesmo para o Docker Desktop pra jogar (não foi um bug de infra) e pediu
+resolver via config do compose em vez de script de boot. Feito:
+- `restart: unless-stopped` → `restart: always` nos 7 composes reais do ecossistema (platform,
+  tunnel, rastafinancas x2, microgrow, artists-booking, vetcare), aplicado ao vivo, 31 contêineres
+  confirmados saudáveis, 4/4 domínios públicos OK, Prometheus 6/6 targets `up`. Ver D-2026-09-09-2.
+- Vault estava `sealed` (contêiner tinha sido recriado nesta mesma sessão pela mudança de restart
+  policy) — deselado (`threshold=1`) e `vault-push-env.sh vetcare` rodado, `METRICS_TOKEN`
+  confirmado no Vault batendo com o `.env` real.
+- **2 achados novos registrados, não corrigidos, aguardando decisão do usuário**: rede
+  `rastafinancas_net` declarada em 2 composes diferentes (frágil); `rastafinancas-api` com nome de
+  métrica HTTP divergente do resto do ecossistema — painéis de Golden Signals nunca mostraram dado
+  real pra rastafinancas (contradiz STATE.md de 2026-08-28).
+- Item 2 (métricas HTTP custom do vetcare) investigado e **deliberadamente NÃO implementado**:
+  Next.js middleware roda antes do route handler, não tem como saber status/duração reais — faria
+  `http_requests_total`/`duration` tecnicamente existir mas com dado sempre errado (status sempre
+  "passou pelo auth", nunca o real), pior que não ter a métrica num dashboard que filtra por
+  `status_code=~"5.."`. Fix correto exige instrumentar os ~50 route handlers do vetcare — fora de
+  escopo desta sessão, registrado como follow-up. Ver `vetcare/.specs/audit/execution.md`.
+
+## Sessão 2026-09-09 (continuação 2) — as 3 pendências resolvidas
+Usuário pediu resolver as 3 pendências (rename de métrica do rastafinancas, rede duplicada,
+instrumentação HTTP do vetcare). Todas fechadas e verificadas externamente:
+1. `rastafinancas-api`: métricas sem prefixo `rasta_` (`http_requests_total`/`http_request_duration_ms`
+   ms, `collectDefaultMetrics` sem prefixo) — compatível com o Golden Signals agora. Dashboard
+   InfluxDB + alertas do rastafinancas atualizados junto; achado e corrigido um bug pré-existente
+   separado nos painéis P50/P95/P99 (nunca retornavam dado desde que o dashboard foi criado).
+2. `rastafinancas_net`: observability compose corrigido pra `external: true` (dono é o compose
+   principal do app) — warning de rede duplicada eliminado.
+3. vetcare: 72 handlers HTTP (48 arquivos) instrumentados de verdade via `withMetrics` +
+   codemod AST (`scripts/wrap-routes-with-metrics.mjs`), `vetcare_` removido do prefixo default.
+Gates completos nos 2 repos, Prometheus confirma os 4 produtos consistentes, Grafana recarregado
+(dashboard v4 + 6 alertas confirmados), 4/4 domínios públicos sem 502. Ver D-2026-09-09-3 em
+DECISIONS.md, detalhe completo em `.specs/audit/execution.md`.
+1 achado novo registrado, não corrigido (fora do pedido): lógica do alerta `rasta-latency-p95`
+(`mean()` sobre contador cumulativo) é aproximada, não uma média real por request — pré-existente.
+
+## Sessão 2026-09-08 — rename branch padrão master→main (infra-platform + varredura) — DONE (com 2 itens escalados)
+`infra-platform` renomeado (master→main, verificado local+remoto+default GitHub). ADR-013 criado.
+Usuário pediu em seguida "atualizar todos que ainda estão desatualizados" — varredura real dos 13
+diretórios em `~/projects/`:
+- `artists-booking`/`microgrow`/`rastafinancas`/`vetcare`/`agents-harness`: já estavam em `main` (suposição inicial do ADR estava errada, corrigida).
+- `dev-environment`: renomeado agora (mesma sequência, verificado).
+- `developerFolio`: **escalado, não tocado** — fork público com gh-pages ativo + 2 workflows que citam `master` por nome (precisaria editar CI, não é só rename de metadado) + branches de feature ativas. Precisa confirmação do usuário antes de agir.
+- `tldr-projects`: **escalado, não tocado** — anomalia real: já tem uma branch `main` local órfã (1 commit não relacionado) + ref remota órfã sem remote configurado; `git branch -m` falhou por colisão de nome; working tree com mudanças não commitadas de outra frente. Descartar a branch órfã é decisão do usuário, não do agente.
+- `url-shortener`: fora de escopo (owner é `thiagomr`, não `rastaFul`).
+- `cron-monitoring`/`gorila`/`logger-lib`: não são repos git.
+Ver D-2026-09-08-{1,2} em DECISIONS.md, tabela completa em ADR-013, detalhe em execution.md.
+Próxima ação: usuário decidir developerFolio (renomear + editar os 2 workflows, ou deixar em master por ser fork) e tldr-projects (o que fazer com a branch `main` órfã antes de eu poder renomear `master`).
+
+## Sessão 2026-09-02 — artists-booking Spec 54 T15 (dashboard novo, sem alerta) — DONE
+10 painéis novos em `platform/dashboards/artists-booking/product-health.json` (RUM: navegação,
+CTA, listas vazias, filtro, wizard, demanda por categoria/região família N, contenção SQLite
+família H). Verificado via API real do Grafana (health, search, dashboard uid, 5 queries
+PromQL representativas via proxy do datasource) — tudo `success`/200, painéis vazios só porque
+o backend da Spec 54 ainda não foi deployado no container `artists-api` (confirmado via
+`/metrics` direto, só métricas da Spec 53 presentes hoje). Nenhum alerta novo criado (fora do
+escopo pedido). Detalhe completo em `.specs/audit/execution.md`.

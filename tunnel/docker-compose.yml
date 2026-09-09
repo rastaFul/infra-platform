@@ -7,6 +7,11 @@
 # container publishing to 127.0.0.1 on the host — same extra_hosts trick
 # already used by otel-collector/prometheus/grafana in platform/docker-compose.yml.
 #
+# restart: always (not unless-stopped, changed 2026-09-09) -- see
+# infra-platform .specs/audit/execution.md (2026-09-09): `unless-stopped`
+# doesn't resurrect a container that crashed and was already Exited before
+# a later Docker Desktop stop/start cycle; `always` does.
+#
 # Start: docker compose up -d
 
 services:
@@ -34,4 +39,4 @@ services:
     # forces single-stack IPv4 resolution.
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1
-    restart: unless-stopped
+    restart: always

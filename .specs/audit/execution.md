@@ -151,3 +151,134 @@ Usuário aprovou: D1 (restartar e validar rastafinancas), D2 (escopo total — r
   - `docker logs`: única mensagem de erro nova observada foi uma falha real e pré-existente de SMTP (Gmail auth, 530 5.7.0) ao tentar notificar — não relacionada a este task, consequência de os alertas terem passado a ser avaliados de verdade pela primeira vez; registrada como achado, não corrigida (fora de escopo, requer decisão do usuário sobre credencial SMTP).
   - Logs finais (pós-fix `noDataState: OK`): zero erro novo, zero notificação disparada pelos 3 alertas novos.
 - Status: DONE (dashboard + alertas prontos, painéis vazios até artists-api exportar as métricas — esperado e documentado na spec 53).
+
+## Task: artists-booking product-health dashboard — Spec 54 T15 (delegado por artists-booking) — 2026-09-02
+- Contexto: Spec 54 (artists-booking, RUM híbrido) adicionou métricas novas ao mesmo `/metrics` já raspado pelo job `apis-host` (`service=artists-api`), via 2 plugins novos no backend (`frontend-metrics.plugin.ts`, `demand-metrics.plugin.ts` — famílias A-H/M/N/O/P). T15 é só o lado infra-platform: painéis novos no mesmo dashboard já existente da Spec 53 (`platform/dashboards/artists-booking/product-health.json`), sem alerta novo (fora de escopo desta task).
+- 10 painéis novos + 6 rows agrupando por família, mesmo estilo/convenção dos 9 painéis da Spec 53 (datasource `${DS_PROMETHEUS}`, `service="artists-api"` em todo target):
+  - Row "Saúde de navegação (RUM)": timeseries dead-click/404/error-boundary (taxa/s) + timeseries de `frontend_rum_event_rejected_total` por `reason`.
+  - Row "Conversão de CTA": timeseries clique vs exposição por `cta` + timeseries de razão clique/exposição (`percentunit`).
+  - Row "Listas vazias e uso de filtro": timeseries `list_empty_total` por `list` + timeseries `filter_applied_total` por `filter`.
+  - Row "Duração de wizard": timeseries único com `histogram_quantile` p50/p95 por `wizard` (unit `s`).
+  - Row "Demanda por categoria/região" (família N): 2 painéis `bargauge` (`demand_by_category`/`demand_by_region`) — tipo de visualização diferente do resto do dashboard (timeseries/stat), decisão deliberada porque é ranking de valor por label, não série temporal.
+  - Row "Sinal de trigger de migração Postgres" (família H): `stat` de `db_write_contention_total` (cumulativo), threshold verde=0/vermelho>=1 — fica visível mesmo em 0 hoje, pra quando começar a subir.
+- JSON validado: `python3 -m json.tool` PASS + verificação de ids únicos (25 entradas no array `panels`, 9 rows + 16 painéis de conteúdo, nenhum id duplicado). `version` 1→2, `tags` ganhou `spec-54`, `title`/`description` atualizados mencionando as 2 specs.
+- Verificação externa real (não self-validada):
+  - `docker compose config --quiet`: PASS antes e depois.
+  - `docker compose restart grafana`: `Up ... (healthy)` em ~1 tentativa (healthcheck).
+  - `GET /api/health`: `{"database":"ok"}`.
+  - `GET /api/search?query=Artists Booking`: dashboard presente na folder "Artists Booking", uid `artists-booking-product-health`.
+  - `GET /api/dashboards/uid/artists-booking-product-health`: HTTP 200, `version: 3` (Grafana bump automático do file-provisioning), 25 entradas em `panels`, todos os 10 títulos novos confirmados presentes.
+  - `docker logs platform-grafana` (últimos 2min pós-restart): zero erro/warning novo de provisioning.
+  - 5 expressões PromQL representativas (incluindo `histogram_quantile` e razão de 2 séries) testadas via `GET /api/datasources/proxy/uid/prometheus-platform/api/v1/query`: todas `status: success` (resultado vazio, esperado — código do backend Spec 54 T1/T2/T9/T10 ainda não foi deployado no container `artists-api` rodando, confirmado via `curl /metrics` direto no host: só métricas da Spec 53 presentes hoje). Painéis vazios até T16/T17 (verificação + deploy real) rodarem — mesmo padrão documentado na Spec 53 T5.
+- Nenhum alerta novo criado (fora do escopo pedido pela task). Sugestão registrada para o usuário avaliar depois: alerta em `db_write_contention_total` (ex. `increase(db_write_contention_total[1h]) > 0` por N ocorrências sustentadas) como trigger formal de decisão de migração Postgres, já que hoje esse limiar é só "julgamento manual olhando o painel".
+- Status: DONE (T15, dashboard). T16 (verificação com dado real via infra isolada) e T17 (deploy real) seguem a cargo de `artists-booking`/orquestrador dev, fora do escopo desta delegação de infra.
+
+## Task: rename branch principal master→main (infra-platform) — 2026-09-08
+- Pré-checagem: `git branch -a` (só `master`, sem outras), sem PR aberto (`gh pr list` vazio), sem workflow/doc referenciando `master` como nome de branch (único hit era `sqlite_master` em `restore-from-backup.md`, falso-positivo).
+- Ação: `git branch -m master main` → `git push -u origin main` → `gh repo edit --default-branch main` → `git push origin --delete master`.
+- Verificação externa:
+  - `git branch -a`: `* main` / `remotes/origin/main` (sem `master` restante, local ou remoto).
+  - `gh repo view rastaFul/infra-platform --json defaultBranchRef`: `{"defaultBranchRef":{"name":"main"}}`.
+- Gates de IaC (terraform/kube/helm) não aplicáveis — operação de metadado de repo git, sem mudança de infra provisionada.
+- ADR-013 criado documentando a convenção pra todos os repos + procedimento de rename reutilizável. D-2026-09-08-1 em DECISIONS.md.
+- Escopo: só `infra-platform` renomeado nesta sessão. Outros 4 repos ficam pendentes (aplicar quando cada um for tocado).
+- Status: DONE
+
+## Task: varredura + rename em massa (todos os repos) — 2026-09-08
+- Varredura de 13 diretórios em `~/projects/`: owner, remote, branch atual, PR aberto, workflow referenciando `master`.
+- `artists-booking`/`microgrow`/`rastafinancas`/`vetcare`/`agents-harness`: já em `main`, nada feito.
+- `dev-environment`: pré-checagem OK (sem PR, `gh pr list` vazio; sem workflow com `master`; sem `.specs` próprio) → mesma sequência (`git branch -m`/`push -u`/`gh repo edit --default-branch`/`push --delete`) → verificado: `git branch -a` só `main`, `gh repo view --json defaultBranchRef` = `main`.
+- `developerFolio`: NÃO executado. `git branch -a` mostra `gh-pages`+`feature/profile`+`feature/profile-resume` além de `master`; `grep -rl master .github` retornou `deploy.yml` e `prettier.yml`; `gh repo view --json isFork,visibility` = fork público. Escalado.
+- `tldr-projects`: NÃO executado. `git remote -v` vazio (sem remote real) mas `git branch -a` mostra `remotes/origin/main` órfã; `git branch -m master main` falhou com "a branch named 'main' already exists"; `git log --oneline main` = 1 commit ("first commit") não relacionado ao histórico real de `master` (3 commits reddit/MCP); `git status` mostra mudanças não commitadas de outra frente. Escalado.
+- `url-shortener`: remote `thiagomr/url-shortener`, não `rastaFul` — fora de escopo, não tocado.
+- `cron-monitoring`/`gorila`/`logger-lib`: não são repos git, N/A.
+- ADR-013 atualizado com tabela completa da varredura. D-2026-09-08-2 em DECISIONS.md.
+- Status: DONE (parcial por natureza — 2 repos renomeados, 2 escalados por decisão explícita, resto fora de escopo ou já conforme)
+
+## Task: corrigir /metrics do vetcare + compose de observabilidade do rastafinancas — 2026-09-09
+Pedido do usuário: "o composer de observabilidade não está funcionando" + "corrija o /metrics do vetcare".
+
+### Diagnóstico (antes de qualquer mudança)
+- `platform/docker-compose.ps` (infra-platform): todos os 10 serviços `Up`/`healthy`. Não é o compose quebrado.
+- `docker ps -a` em todo o host: achado real — `rasta-telegraf` e `rasta-promtail` (`rastafinancas/infrastructure/observability/docker-compose.yml`) `Exited (255)` há ~26h, enquanto todo o resto do host tinha `StartedAt` ~1h DEPOIS desse exit (confirmado via `docker inspect --format .State.StartedAt` em 9 containers de referência). Log do promtail mostrou a causa real: `"=== received SIGINT/SIGTERM === exiting"` às 2026-09-07T03:54:17 — um `docker stop` explícito (ou `compose down/stop`), não crash nem OOM (`OOMKilled=false`), não recriação de rede (`platform_net`/`rastafinancas_net` com `Created` de 2026-06-03, sem mudança recente). `RestartCount=0` confirma: `restart: unless-stopped` não resscita contêiner que já estava `Exited` ANTES de o daemon Docker ser reiniciado — só resscita o que estava `Up` no momento do restart do daemon. Isso explica por que os outros 9 (que estavam `Up`) voltaram sozinhos ~1h depois e esses 2 não.
+- vetcare: `/metrics` não existe no código (`grep`/`find` no `src/app` vazio), `prometheus.yml` não tinha job pra vetcare, `curl /metrics` público redirecionava pro login (comportamento do NextAuth middleware pegando rota inexistente, não um bug do endpoint em si — endpoint nunca existiu).
+
+### Fix 1 — rastafinancas observability compose
+- `cd rastafinancas/infrastructure/observability && docker compose config --quiet` (PASS) → `docker compose up -d` → `rasta-telegraf`/`rasta-promtail` `Up`, sem novos erros nos logs subsequentes (checado com `--since 20s`, zero repetição do erro antigo de EOF).
+- Verificação externa real (não só "container Up"): `POST /api/v2/query` no InfluxDB (`org=platform`, bucket `rastafinancas`) — measurements `rasta_*`/`cpu`/`mem`/`disk`/`http_response` com `_time` de agora (não dado antigo). `GET /loki/api/v1/query` com `{container="rastafinancas-api"}` — log entry com timestamp atual.
+- Causa raiz do STOP original não identificada com certeza (não há `docker events` retroativo disponível) — registrado como tal, não inventado. Ação de mitigação estrutural NÃO feita nesta sessão (ver pendência abaixo).
+
+### Fix 2 — vetcare /api/metrics + wiring Prometheus
+- Código em `vetcare` (repo separado, ver `vetcare/.specs/audit/execution.md` sessão 2026-09-09 pro detalhe completo): rota `/api/metrics` com `prom-client`, protegida por `METRICS_TOKEN` (mesmo valor deste repo, `platform/prometheus/metrics_token`), bypass do NextAuth middleware.
+- `platform/prometheus/prometheus.yml`: **não** deu pra reusar o job `apis-host` (fixa `metrics_path: /metrics` pra todos os targets dele) — vetcare usa `/api/metrics` (Next.js, não Fastify). Job `vetcare` dedicado criado, mesmo `credentials_file` compartilhado.
+- Comentário de cabeçalho do arquivo corrigido (citava "PM2, not yet containerized", desatualizado desde a migração Batch 3 de 2026-08-29).
+
+### Achado real extra, não pedido, corrigido no caminho — bug de bind-mount do Prometheus
+Ao rodar `docker compose restart prometheus` pra aplicar o `prometheus.yml` novo, o container falhou ao subir: `error mounting ".../docker-desktop-bind-mounts/..." to rootfs at "/etc/prometheus/prometheus.yml": no such file or directory`. Bug conhecido de Docker Desktop/WSL2 (cache de bind-mount de arquivo único fica órfão depois de edição externa ao Docker). `docker compose up -d --force-recreate prometheus` resolveu (remapeia o bind mount do zero). Sem esse fix, a mudança do `prometheus.yml` teria ficado silenciosamente sem efeito (container não sobe) — achado só porque a verificação externa (`/-/healthy`, `/api/v1/targets`) é obrigatória antes de considerar DONE.
+
+### Verificação externa final
+- `docker compose config --quiet` (platform): PASS
+- `GET /-/healthy` (Prometheus): `200 Prometheus Server is Healthy`
+- `GET /api/v1/targets`: 6/6 `up` (`apis-host` x3 + `otel-collector` x2 + `vetcare` novo)
+- `GET /api/v1/query?query=vetcare_process_cpu_seconds_total`: resultado real, valor > 0, timestamp atual
+- `GET /api/v1/series?match[]=http_requests_total{service="vetcare"}`: vazio — confirma que vetcare NÃO aparece ainda no dashboard "Golden Signals" (variável `$service` depende dessa métrica, que vetcare não expõe ainda — gap documentado, não escondido)
+- Status: DONE (com 2 pendências explícitas abaixo, não escondidas)
+
+### Pendências registradas (não resolvidas nesta sessão)
+1. **Resiliência estrutural**: nenhum boot script (`wsl-boot.sh`) traz de volta contêineres que já estavam `Exited` antes de um restart do Docker Desktop/WSL2 — só o `restart: unless-stopped` nativo do Docker cobre isso, e só pra contêineres que estavam `Up` no momento do restart do daemon. Isso pode se repetir com qualquer compose sidecar (telegraf/promtail de qualquer projeto). Não corrigido agora — precisa decisão (ex.: `wsl-boot.sh` rodando `docker compose up -d` explícito em cada compose do ecossistema, não só confiar na restart policy).
+2. **vetcare sem métricas HTTP custom** (`http_requests_total`) — só métricas de processo por enquanto, não aparece no Golden Signals. Documentado em `vetcare/.specs/features/observability-metrics/spec.md`.
+3. `vetcare` `METRICS_TOKEN` não empurrado pro Vault (`vault-push-env.sh`).
+
+### Gate de qualidade de infra (per-task)
+`skills/infra-quality-gates/scripts/run-infra-quality.sh .`: `overall: PASS` — tflint/kubeconform/pluto `SKIPPED` (sem `.tf`/manifests K8s tocados nesta task, é docker-compose YAML + código Next.js, já gated por `jest`/`tsc`/`eslint` do lado do vetcare + `docker compose config --quiet` dos 2 composes tocados).
+
+## Task: restart:always em todos os composes (pendência 1 fechada) — 2026-09-09
+Pedido do usuário: em vez de script de boot, resolver via config do compose — usuário confirmou que
+o `docker stop` que derrubou telegraf/promtail foi ELE MESMO parando o Docker Desktop pra jogar, e
+espera que tudo volte sozinho quando reiniciar. `restart: unless-stopped` não cobre esse caso pra
+contêiner que já tinha crashado sozinho antes do stop (ver task anterior); `restart: always` cobre,
+porque resscita no restart do daemon independente do estado do contêiner antes do shutdown.
+- `restart: unless-stopped` → `restart: always` em TODOS os composes reais do ecossistema (excluído
+  `.harness-sandbox/docker/docker-compose.yml` de cada repo — é sandbox de CI, efêmero, não faz
+  parte do stack local persistente):
+  - `infra-platform/platform/docker-compose.yml` (10 serviços)
+  - `infra-platform/tunnel/docker-compose.yml` (1)
+  - `rastafinancas/docker-compose.yml` (2) + `rastafinancas/infrastructure/observability/docker-compose.yml` (2)
+  - `microgrow/infra/docker-compose.yml` (7)
+  - `artists-booking/docker-compose.dev.yml` (4)
+  - `vetcare/docker-compose.dev.yml` (4)
+- Comentário de cabeçalho de cada arquivo atualizado explicando a troca (não silenciosa). `wsl-boot.sh` também atualizado (citava `unless-stopped` explicitamente).
+- Gates: `docker compose config --quiet` PASS nos 7 (vetcare com warning pré-existente de `version` obsoleto no YAML, não bloqueante, não introduzido por esta mudança).
+- Aplicado ao vivo (não só no arquivo): `docker compose up -d` em cada um dos 7 diretórios — Compose recriou só os contêineres cuja config mudou (a restart policy), sem rebuild de imagem. 31 contêineres confirmados `Up`/`healthy` depois via `docker ps`.
+- Verificação externa pós-recriação: 4/4 domínios públicos (`vetcare`/`financas`/`grow`/`artists`.rastaful.dev) responderam `307` (redirect esperado, não `502`) — tunnel sobreviveu à recriação. Prometheus: 6/6 targets `up` de novo (incluindo `vetcare`, task anterior).
+- **Achado colateral, não corrigido (fora do pedido)**: `docker compose up -d` em `rastafinancas/infrastructure/observability` emitiu warning — `rastafinancas_net` é declarada (não-`external`) em DOIS composes diferentes (`rastafinancas/docker-compose.yml` E `infrastructure/observability/docker-compose.yml`), Compose trata como "projetos" distintos disputando o mesmo nome de rede. Funcionou (containers subiram, rede reaproveitada), mas é frágil — registrado, não é bloqueante, precisa decisão (ex.: observability deveria referenciar `rastafinancas_net` como `external: true`, já que quem deveria "possuir" a rede é o compose principal do app).
+- **Achado colateral extra, registrado, não corrigido (precisa decisão do usuário antes de mexer, é rename de métrica com histórico em produção)**: enquanto investigava a instrumentação HTTP do vetcare (próxima task), descoberto que `rastafinancas-api` expõe `rasta_http_requests_total`/`rasta_http_request_duration_seconds` (prefixado, segundos) enquanto o dashboard "Golden Signals" (`platform/dashboards/platform/golden-signals.json`) e `artists-api`/`microgrow-api` usam `http_requests_total`/`http_request_duration_ms` (sem prefixo, ms). Confirmado ao vivo: `GET /api/v1/query?query=http_requests_total` NUNCA retorna série com `service="rastafinancas-api"`. Os painéis de request-rate/error-rate/latência desse dashboard nunca mostraram dado real pra rastafinancas, apesar do que STATE.md (2026-08-28) registra. Ver `vetcare/.specs/audit/execution.md` (2026-09-09) pro detalhe completo.
+- Status: DONE (pendência 1 fechada; 2 achados colaterais registrados, não corrigidos, aguardando decisão)
+
+## Task: resolver as 3 pendências (rename métrica, rede duplicada, instrumentação HTTP vetcare) — 2026-09-09
+Usuário pediu explicitamente resolver os 3 achados anteriores.
+
+### 1. Rename `rasta_*` → sem prefixo (rastafinancas)
+- `rastafinancas/apps/api/src/plugins/metrics.ts`: `collectDefaultMetrics({ prefix: 'rasta_' })` → sem prefixo; `rasta_http_requests_total`→`http_requests_total`; `rasta_http_request_duration_seconds`→`http_request_duration_ms` (buckets ms iguais ao microgrow-api); `reply.elapsedTime / 1000` → `reply.elapsedTime` (já em ms). Métricas de produto (`product-metrics.ts`) NÃO tocadas (prefixo de propósito, evita colisão entre produtos).
+- Gates: `tsc --noEmit` (apps/api) limpo; `vitest run src/plugins` 15/15 PASS (sem lint configurado neste repo — confirmado, sem script/config eslint). Rebuild real (`docker compose up -d --build api`), curl real confirma `http_requests_total`/`http_request_duration_ms_bucket`/`process_resident_memory_bytes` sem prefixo.
+- **Efeito colateral descoberto e corrigido**: dashboard InfluxDB `platform/dashboards/rastafinancas/rasta-api-performance.json` e `platform/grafana/provisioning/alerting/rastafinancas.yaml` (regras `rasta-error-rate-critical`, `rasta-latency-p95`) referenciavam os nomes antigos — atualizados. No processo, achado um bug PRÉ-EXISTENTE e SEPARADO (não introduzido agora): os painéis P50/P95/P99 filtravam `_measurement == "rasta_http_request_duration_seconds_bucket"` (sufixo `_bucket` que o Telegraf nunca gera — ele grava todos os buckets de um histograma numa medição só, um field por boundary `le`) e `_field == "counter"` (não existe nesse measurement) — ou seja, esses 3 painéis NUNCA retornaram dado, desde que o dashboard foi criado. Corrigido com uma query Flux própria (pivot dos fields de bucket + interpolação simples de quantil por boundary, testada com dado real via API do InfluxDB antes de ir pro JSON — resultados sãos: p50 5ms/10ms pras rotas testadas). Threshold do alerta de latência (`rasta-latency-p95`) também tinha uma conversão `* 1000.0` que ficou redundante (dado já em ms agora) — removida; a lógica de `mean()` sobre o field `sum` (cumulativo) do alerta continua conceitualmente aproximada (não é uma média real por request), mas isso já existia antes e não foi o que foi pedido — registrado, não redesenhado.
+- Verificação externa completa: `python3 -m json.tool` PASS (dashboard), `yaml.safe_load` PASS (alertas), `docker compose restart grafana` healthy, dashboard confirmado via API (`version: 4`, recarregado), 6 alert rules de rastafinancas confirmadas via `GET /api/v1/provisioning/alert-rules` (com `X-Grafana-Org-Id: 1` — achado à parte: o usuário `admin` autentica em `orgId=2` por padrão neste Grafana multi-org, header explícito necessário pra API bater com o que está provisionado em orgId 1), queries de rate/p50/p95/p99/error-rate testadas diretamente contra a API do InfluxDB (não só "carregou", "retorna número plausível").
+- Prometheus: `service=rastafinancas-api` confirmado presente em `http_requests_total`/`process_resident_memory_bytes` via `GET /api/v1/series` — rastafinancas agora elegível pro `$service` do Golden Signals pela primeira vez.
+
+### 2. Rede `rastafinancas_net` duplicada
+- `rastafinancas/infrastructure/observability/docker-compose.yml`: `rastafinancas_net` (era `driver: bridge`, não-external) → `external: true` (dono real é `rastafinancas/docker-compose.yml`). Comentário simétrico adicionado no compose principal documentando a posse.
+- `docker compose config --quiet` PASS nos 2; `docker compose up -d` na observability sem warning (antes: "a network with name rastafinancas_net exists but was not created for project..."). Containers já rodando não precisaram recriar (rede já existia idêntica no Docker), fix é de correção de config pra frente, não uma mudança de runtime.
+
+### 3. Instrumentação HTTP real do vetcare (72 handlers)
+- `src/lib/with-metrics.ts` criado: wrapper `withMetrics(route, handler)` que mede duração real (`process.hrtime.bigint()`) e lê `res.status` de verdade — só possível dentro do route handler (motivo documentado na task anterior de por que middleware não serve).
+- `scripts/wrap-routes-with-metrics.mjs` (vetcare): codemod usando o TypeScript compiler API (AST) pra localizar com segurança cada `export async function METODO(...)` top-level em `src/app/api/**/route.ts`, renomear pra `METODO_impl` e adicionar `export const METODO = withMetrics(rota, METODO_impl)` logo depois — reescrita por slice de texto (não pelo printer do TS), preserva comentários/formatação do corpo 100%. Rodado primeiro em `--dry-run` (revisado: 72 handlers em 48 arquivos, 2 pulados de propósito — `/api/metrics` e o catch-all do NextAuth), depois de verdade.
+- `src/lib/metrics.ts`: removido o prefixo `vetcare_` de `collectDefaultMetrics` (mesma motivação do rastafinancas — compat com o painel de memória do Golden Signals) e adicionadas `http_requests_total`/`http_request_duration_ms` (mesmos buckets do microgrow-api).
+- Gates: `tsc --noEmit` limpo nos 48 arquivos tocados; `eslint` limpo; `jest` 234/234 (233 pré-existentes + 1 teste próprio corrigido, esperava o prefixo antigo); `npm run build` real PASS (todas as rotas compiladas, App Router não acusou nada). Rebuild real do container (`docker compose -f docker-compose.dev.yml up -d --build app`), `healthy`.
+- Verificação externa: `curl /api/health` real incrementou `http_requests_total{route="/api/health",status_code="200"}` de verdade (confirmado via `/api/metrics`); rotas que exigem sessão (ex. `/api/v1/animals`) corretamente NÃO incrementaram sem cookie válido — comportamento esperado (o wrapper só mede o que de fato chega no handler, requests barrados pelo NextAuth antes disso não contam, por design). Prometheus: `service=vetcare` confirmado em `http_requests_total` via `GET /api/v1/series` — os 4 produtos agora compatíveis com o Golden Signals pela mesma convenção de nome.
+
+### Verificação final do host inteiro (pós as 3 correções)
+`docker ps`: todos os contêineres `Up`/saudáveis. 4/4 domínios públicos (`vetcare`/`financas`/`grow`/`artists`.rastaful.dev) respondendo `307`, sem `502`. Prometheus: `service` label agora inclui os 4 produtos de forma consistente.
+- Status: DONE — as 3 pendências fechadas e verificadas externamente. 1 achado novo registrado, não corrigido (fora do pedido): lógica de `mean()` sobre contador cumulativo no alerta `rasta-latency-p95` é uma aproximação, não uma média real de latência por request — pré-existente, não introduzida agora.
+
+### Gate de qualidade de infra (final desta rodada)
+`skills/infra-quality-gates/scripts/run-infra-quality.sh .`: `overall: PASS` — tflint/kubeconform/pluto `SKIPPED` (sem `.tf`/manifests K8s; mudanças foram docker-compose YAML, Grafana dashboard/alert JSON+YAML, e código TypeScript/Next.js — todos já gated por seus próprios validadores nativos: `docker compose config`, `python3 -m json.tool`, `yaml.safe_load`, `tsc`/`vitest`/`jest`/`eslint`/`next build`).

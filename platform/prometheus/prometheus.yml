@@ -1,7 +1,9 @@
 # Prometheus — Phase 0
 # Scrapes: OTEL Collector (app+collector metrics forwarded from OTEL SDK)
-#          + each API's own /metrics (prom-client), directly, since apps
-#          still run via PM2 on the host (Batch 3 will containerize them).
+#          + each API's own /metrics (prom-client), directly via
+#          host.docker.internal:PORT (containers publish to 127.0.0.1:PORT
+#          since Batch 3's PM2→Docker Compose migration — comment corrected
+#          2026-09-09, was stale since referring to the pre-migration PM2 setup).
 # See infra-platform/docs/explanation/adr/009-caddy-deferred-prometheus-added.md
 
 global:
@@ -36,3 +38,15 @@ scrape_configs:
       - targets: ['host.docker.internal:4000']
         labels: { service: microgrow-api }
     metrics_path: /metrics
+
+  # vetcare — job separado porque a rota é /api/metrics (Next.js App Router,
+  # não Fastify — não dá pra reusar o job acima, que fixa metrics_path:
+  # /metrics pra todos os targets de dentro dele). Mesmo token compartilhado
+  # (metrics_token), ver vetcare/.specs/features/observability-metrics/spec.md.
+  - job_name: vetcare
+    authorization:
+      credentials_file: /etc/prometheus/metrics_token
+    metrics_path: /api/metrics
+    static_configs:
+      - targets: ['host.docker.internal:3004']
+        labels: { service: vetcare }

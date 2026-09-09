@@ -75,14 +75,14 @@ groups:
               query: |
                 errors = from(bucket: "rastafinancas")
                   |> range(start: -5m)
-                  |> filter(fn: (r) => r._measurement == "rasta_http_requests_total")
+                  |> filter(fn: (r) => r._measurement == "http_requests_total")
                   |> filter(fn: (r) => r._field == "counter")
                   |> filter(fn: (r) => r.status_code =~ /^5/)
                   |> sum()
 
                 total = from(bucket: "rastafinancas")
                   |> range(start: -5m)
-                  |> filter(fn: (r) => r._measurement == "rasta_http_requests_total")
+                  |> filter(fn: (r) => r._measurement == "http_requests_total")
                   |> filter(fn: (r) => r._field == "counter")
                   |> sum()
 
@@ -136,10 +136,9 @@ groups:
               query: |
                 from(bucket: "rastafinancas")
                   |> range(start: -5m)
-                  |> filter(fn: (r) => r._measurement == "rasta_http_request_duration_seconds")
+                  |> filter(fn: (r) => r._measurement == "http_request_duration_ms")
                   |> filter(fn: (r) => r._field == "sum")
                   |> mean()
-                  |> map(fn: (r) => ({r with _value: r._value * 1000.0}))
           - refId: C
             datasourceUid: "__expr__"
             model:
