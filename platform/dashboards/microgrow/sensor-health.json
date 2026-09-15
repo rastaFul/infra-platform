@@ -62,7 +62,8 @@
         {
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"soil_moisture\")\n  |> filter(fn: (r) => r._field == \"vwc_pct\")\n  |> group(columns: [\"position\"])\n  |> last()\n  |> map(fn: (r) => ({\n      sensor: r.position,\n      type: \"solo\",\n      vwc_pct: r._value,\n      age_s: int(v: uint(v: now()) - uint(v: r._time)) / 1000000000\n    }))"
+          "rawSql": "SELECT position as sensor, 'solo' as type, vwc_pct, extract(epoch FROM now() - time) as age_s FROM (SELECT position, vwc_pct, time, ROW_NUMBER() OVER (PARTITION BY position ORDER BY time DESC) as rn FROM soil_moisture WHERE time >= now() - INTERVAL '10 minutes') t WHERE rn = 1",
+          "format": "table"
         }
       ]
     },
@@ -98,7 +99,8 @@
         {
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"api_metrics\")\n  |> filter(fn: (r) => r._field == \"sensor_age_soil_center_s\")\n  |> last()"
+          "rawSql": "SELECT sensor_age_soil_center_s FROM api_metrics WHERE time >= now() - INTERVAL '10 minutes' ORDER BY time DESC LIMIT 1",
+          "format": "table"
         }
       ]
     },
@@ -134,7 +136,8 @@
         {
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"api_metrics\")\n  |> filter(fn: (r) => r._field == \"sensor_age_soil_lateral_s\")\n  |> last()"
+          "rawSql": "SELECT sensor_age_soil_lateral_s FROM api_metrics WHERE time >= now() - INTERVAL '10 minutes' ORDER BY time DESC LIMIT 1",
+          "format": "table"
         }
       ]
     },
@@ -170,7 +173,8 @@
         {
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: -10m)\n  |> filter(fn: (r) => r._measurement == \"api_metrics\")\n  |> filter(fn: (r) => r._field == \"sensor_age_soil_opposite_s\")\n  |> last()"
+          "rawSql": "SELECT sensor_age_soil_opposite_s FROM api_metrics WHERE time >= now() - INTERVAL '10 minutes' ORDER BY time DESC LIMIT 1",
+          "format": "table"
         }
       ]
     },
@@ -200,7 +204,8 @@
         {
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r._measurement == \"soil_moisture\")\n  |> filter(fn: (r) => r._field == \"vwc_pct\")\n  |> aggregateWindow(every: 30m, fn: mean, createEmpty: false)"
+          "rawSql": "SELECT date_bin(INTERVAL '30 minutes', time) as time, position, avg(vwc_pct) as vwc_pct FROM soil_moisture WHERE time >= now() - INTERVAL '7 days' GROUP BY 1, position ORDER BY 1",
+          "format": "time_series"
         }
       ]
     },
@@ -228,7 +233,8 @@
         {
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"soil_moisture\")\n  |> filter(fn: (r) => r._field == \"raw\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "rawSql": "SELECT $__dateBin(time) as time, position, avg(raw) as raw FROM soil_moisture WHERE $__timeFilter(time) GROUP BY 1, position ORDER BY 1",
+          "format": "time_series"
         }
       ]
     },
@@ -265,7 +271,8 @@
         {
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: -7d)\n  |> filter(fn: (r) => r._measurement == \"air_conditions\")\n  |> filter(fn: (r) => r.position == \"canopy\")\n  |> filter(fn: (r) => r._field == \"vpd_kpa\")\n  |> aggregateWindow(every: 1h, fn: mean, createEmpty: false)"
+          "rawSql": "SELECT date_bin(INTERVAL '1 hour', time) as time, avg(vpd_kpa) as vpd_kpa FROM air_conditions WHERE position = 'canopy' AND time >= now() - INTERVAL '7 days' GROUP BY 1 ORDER BY 1",
+          "format": "time_series"
         }
       ]
     }

@@ -15,8 +15,14 @@ storage "file" {
 log_level = "info"
 log_file  = "/vault/logs/vault.log"
 
-# Disable mlock for Docker (kernel capability IPC_LOCK handles this)
-disable_mlock = false
+# disable_mlock = true (changed 2026-09-15, infra-full-upgrade-2026-09 Lote 7,
+# bump to Vault 2.1.0): Vault 2.x images removed the cap_ipc_lock capability
+# at build time -- granting `cap_add: IPC_LOCK` in the compose file (kept for
+# documentation, has no effect anymore) no longer lets the binary call
+# mlock(). With disable_mlock still `false`, that mlock() call fails and
+# Vault refuses to start. Same tradeoff Vault's own install docs recommend
+# for containerized/non-swap environments generally.
+disable_mlock = true
 
 # Telemetry — expose to OTEL collector
 telemetry {

@@ -33,12 +33,18 @@ exporters:
     sampling_initial: 2
     sampling_thereafter: 100
 
-  # Logs: forward to Loki
-  loki:
-    endpoint: http://loki:3100/loki/api/v1/push
-    default_labels_enabled:
-      exporter: false
-      job: true
+  # Logs: forward to Loki via native OTLP ingestion (Loki 3.x, endpoint
+  # POST /otlp/v1/logs). Changed 2026-09-15 (infra-full-upgrade-2026-09,
+  # Lote 3+5) -- the dedicated `loki` exporter was deleted from
+  # opentelemetry-collector-contrib (confirmed: exporter/lokiexporter
+  # directory 404s at tag v0.160.0 on GitHub, it existed pre-upgrade at
+  # 0.103.0), deprecated upstream in favor of Loki's own native OTLP
+  # endpoint (available since Loki 3.0 -- coupled to the Loki bump in the
+  # same lote, not independently schedulable).
+  otlp_http/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
 
   # Metrics: expose for Prometheus scrape
   prometheus:
@@ -46,6 +52,21 @@ exporters:
     namespace: otel
 
 service:
+  # Self-metrics endpoint (0.0.0.0:8888, scraped by prometheus.yml job
+  # `otel-collector`) explicit since 2026-09-15 (infra-full-upgrade-2026-09,
+  # Lote 3) -- collector >=0.123.0 ignores the old `telemetry.metrics.address`
+  # key entirely (was silently dropping the endpoint here after the bump
+  # from 0.103.0, confirmed via a real down target in Prometheus, not
+  # assumed from the changelog alone). New syntax below is the only one
+  # that still works.
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: "0.0.0.0"
+                port: 8888
   pipelines:
     traces:
       receivers: [otlp]
@@ -58,4 +79,4 @@ service:
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [loki]
+      exporters: [otlp_http/loki]

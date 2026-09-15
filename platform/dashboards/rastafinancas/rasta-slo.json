@@ -123,7 +123,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "total = from(bucket: \"rastafinancas\")\n  |> range(start: -30d, stop: now())\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_response_result_code\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"probe\"] == \"api-local\")\n  |> count()\n\nup = from(bucket: \"rastafinancas\")\n  |> range(start: -30d, stop: now())\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_response_result_code\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"probe\"] == \"api-local\")\n  |> filter(fn: (r) => r[\"_value\"] == 0)\n  |> count()\n\nunion(tables: [up, total])\n  |> yield(name: \"api_uptime_pct\")"
+          "rawSql": "SELECT\n  100.0 * SUM(CASE WHEN result_code = 0 THEN 1 ELSE 0 END) / COUNT(*) AS value\nFROM http_response\nWHERE time >= now() - INTERVAL '30 days' AND probe = 'api-local'",
+          "format": "table"
         }
       ]
     },
@@ -185,7 +186,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "total = from(bucket: \"rastafinancas\")\n  |> range(start: -30d, stop: now())\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_response_result_code\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"probe\"] == \"web-public\")\n  |> count()\n\nup = from(bucket: \"rastafinancas\")\n  |> range(start: -30d, stop: now())\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_response_result_code\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"probe\"] == \"web-public\")\n  |> filter(fn: (r) => r[\"_value\"] == 0)\n  |> count()\n\nunion(tables: [up, total])\n  |> yield(name: \"web_uptime_pct\")"
+          "rawSql": "SELECT\n  100.0 * SUM(CASE WHEN result_code = 0 THEN 1 ELSE 0 END) / COUNT(*) AS value\nFROM http_response\nWHERE time >= now() - INTERVAL '30 days' AND probe = 'web-public'",
+          "format": "table"
         }
       ]
     },
@@ -246,7 +248,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: -1m, stop: now())\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_response_result_code\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"probe\"] == \"api-local\")\n  |> map(fn: (r) => ({ r with _value: 99.5 }))\n  |> last()\n  |> yield(name: \"slo_target\")"
+          "rawSql": "SELECT 99.5 AS value",
+          "format": "table"
         }
       ]
     },
@@ -307,7 +310,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: -30d, stop: now())\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_response_result_code\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"probe\"] == \"api-local\")\n  |> filter(fn: (r) => r[\"_value\"] != 0)\n  |> count()\n  |> map(fn: (r) => ({ r with _value: float(v: 43200) - float(v: r._value) * 1.0 }))\n  |> yield(name: \"error_budget_minutes\")"
+          "rawSql": "SELECT 43200.0 - COUNT(*) AS value\nFROM http_response\nWHERE time >= now() - INTERVAL '30 days' AND probe = 'api-local' AND result_code != 0",
+          "format": "table"
         }
       ]
     },
@@ -369,7 +373,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_response_response_time\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"probe\"] == \"api-local\")\n  |> map(fn: (r) => ({ r with _value: r._value * 1000.0 }))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"api_response_time_ms\")"
+          "rawSql": "SELECT date_bin($__interval, time) AS time, AVG(response_time * 1000) AS value\nFROM http_response\nWHERE $__timeFilter(time) AND probe = 'api-local'\nGROUP BY 1\nORDER BY 1",
+          "format": "time_series"
         }
       ]
     },
@@ -431,7 +436,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_response_response_time\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"probe\"] == \"web-public\")\n  |> map(fn: (r) => ({ r with _value: r._value * 1000.0 }))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"web_response_time_ms\")"
+          "rawSql": "SELECT date_bin($__interval, time) AS time, AVG(response_time * 1000) AS value\nFROM http_response\nWHERE $__timeFilter(time) AND probe = 'web-public'\nGROUP BY 1\nORDER BY 1",
+          "format": "time_series"
         }
       ]
     },
@@ -514,7 +520,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_response_result_code\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"_value\"] != 0)\n  |> keep(columns: [\"_time\", \"_value\", \"probe\", \"url\"])\n  |> sort(columns: [\"_time\"], desc: true)\n  |> yield(name: \"downtime_events\")"
+          "rawSql": "SELECT time, result_code AS value, probe, server AS url\nFROM http_response\nWHERE $__timeFilter(time) AND result_code != 0\nORDER BY time DESC",
+          "format": "table"
         }
       ]
     }

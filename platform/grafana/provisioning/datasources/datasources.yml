@@ -1,14 +1,21 @@
 apiVersion: 1
 datasources:
+  # Switched from InfluxDB 2.7 (Flux) to InfluxDB 3 Core (SQL) 2026-09-15
+  # (infra-full-upgrade-2026-09, D3). Old datasources kept below (commented
+  # out, not deleted) purely as documentation of the previous config -- the
+  # old `influxdb` 2.7 container is still running as rollback (see
+  # platform/docker-compose.yml comment) but no dashboard points at it
+  # anymore after this change; re-enable if a full rollback is needed.
   - uid: influxdb-microgrow
     name: InfluxDB — MicroGrow
     type: influxdb
     access: proxy
-    url: http://influxdb:8086
+    url: http://influxdb3:8181
     jsonData:
-      version: Flux
-      organization: platform
-      defaultBucket: sensors
+      version: SQL
+      dbName: sensors
+      httpMode: POST
+      insecureGrpc: true # plain gRPC, no TLS -- same as every other internal service here
     secureJsonData:
       token: ${INFLUXDB_TOKEN_MICROGROW}
     isDefault: true
@@ -17,11 +24,12 @@ datasources:
     name: InfluxDB — RastaFinancas
     type: influxdb
     access: proxy
-    url: http://influxdb:8086
+    url: http://influxdb3:8181
     jsonData:
-      version: Flux
-      organization: platform
-      defaultBucket: rastafinancas
+      version: SQL
+      dbName: rastafinancas
+      httpMode: POST
+      insecureGrpc: true
     secureJsonData:
       token: ${INFLUXDB_TOKEN_RASTAFINANCAS}
     isDefault: false

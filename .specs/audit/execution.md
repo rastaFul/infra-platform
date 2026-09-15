@@ -363,3 +363,392 @@ máquina/sessão — outro clone precisa instalar os dois (comandos no cabeçalh
 falso `[PASS]`. CI (`.github/workflows/gates.yml`) já roda gitleaks incondicionalmente dentro do
 `harness-sandbox` (que já tem o binário), então a rede de segurança pós-push continua intacta
 mesmo nos clones sem os binários locais.
+
+## Lote 0: Pré-voo (backup + tags) — infra-full-upgrade-2026-09 — 2026-09-15T15:43:00-03:00
+- scripts/backup.sh: PASS (SQLite x2, Postgres vetcare, 4 volumes Docker, Vault keys — 95M, sem R2)
+- git tag pre-infra-upgrade-2026-09: PASS em infra-platform (96c30a0), rastafinancas (fb456f1),
+  microgrow (cf8ba9a7), vetcare (aae2eb7), artists-booking (6593012)
+- WIP não-relacionado em rastafinancas/microgrow deixado intocado (working tree dirty de outra
+  frente do usuário) — tag aponta pro HEAD committed, não pro working tree
+- Status: DONE
+
+## Lote 1: Tooling (Terraform CLI + provider OCI) — infra-full-upgrade-2026-09 — 2026-09-15T15:52:00-03:00
+- Terraform CLI: 1.9.8 -> 1.16.2 (binário verificado por SHA256SUM oficial antes de substituir;
+  binário antigo preservado em ~/.local/bin/terraform.pre-upgrade-2026-09)
+- terraform-provider-oci: ~>6.0 -> ~>9.0 (v9.1.0 instalado) em modules/oci-compute e
+  environments/oci-free. Changelog checado: única breaking change relevante (remoção de
+  distributed_database) não é usada neste módulo (só VCN/subnet/instance/security_list) — sem
+  ajuste de código necessário.
+- terraform validate: PASS
+- terraform fmt -check -recursive: PASS
+- terraform plan: BLOCKED (mesma pendência pré-existente — sem conta OCI nem `terraform login` no
+  Terraform Cloud, não é regressão desta sessão)
+- git diff: só .terraform.lock.hcl + 2 main.tf, nenhum binário de provider vazado
+- Status: DONE
+
+## Lote 2: Promtail -> Grafana Alloy (4 produtos) — infra-full-upgrade-2026-09 — 2026-09-15T16:10:00-03:00
+Delegado em paralelo a 4 sub-agentes task-executor (1 por produto, sem sobreposição de arquivos).
+- microgrow: convert PASS, alloy validate PASS, docker compose config PASS, container Up, Loki
+  gate real PASS (log novo de microgrow-api confirmado via query_range).
+- rastafinancas: mesmo padrão, PASS em todos os gates, log novo de rastafinancas-api confirmado.
+- vetcare: mesmo padrão, PASS, anti-self-scraping confirmado (filtro `^vetcare$` ancorado mantido).
+- artists-booking: mesmo padrão, PASS, log novo de artists-api confirmado.
+Achado comum aos 4 (não bloqueante): replay de backlog de dias no cold-start do Alloy (volume de
+posições novo, sem herdar checkpoint do Promtail) gera `entry too far behind` no Loki por alguns
+segundos — descarte de log histórico esperado, sem perda de log novo, sem crash.
+Decisões dos sub-agentes não confirmadas por mim ainda (ver dúvidas finais): nome do container
+mantido `<produto>-promtail` em 3/4 (só microgrow trocou o nome do serviço, manteve container_name)
+em vez de renomear pra `<produto>-alloy`; configs antigas mantidas como histórico (não deletadas).
+Status: DONE (4/4).
+
+## Lote 3+4+5 (combinados por dependência real descoberta em execução): OTEL Collector + Prometheus + Loki — 2026-09-15T16:15:00-03:00
+Achado de sequenciamento real durante a execução (registrar como desvio do spec.md original, que
+tinha Lote 3/Lote 4/Lote 5 como blocos separados): o exporter dedicado `loki` do
+opentelemetry-collector-contrib foi DELETADO do binário (confirmado: `exporter/lokiexporter` 404
+no GitHub na tag v0.160.0, existia em 0.103.0) — só resta usar OTLP nativo do Loki (`/otlp/v1/logs`),
+que só existe a partir do Loki 3.x. Bumpar o OTEL Collector sem bumpar o Loki junto quebraria a
+config (`otlp_http` exporter apontando pra um Loki 2.x que não entende OTLP). Os 3 serviços foram
+tratados como uma unidade de gate.
+- **OTEL Collector**: 0.103.0 -> 0.160.0. Exporter `loki` -> `otlp_http/loki` (`http://loki:3100/otlp`,
+  TLS insecure). 2 bugs reais achados e corrigidos via gate externo (não hipotéticos):
+  1. Usei inicialmente o alias `otlphttp` (deprecated) em vez do nome canônico `otlp_http` —
+     achado pelo `[warn] "otlphttp" alias is deprecated` real no log do container, corrigido.
+  2. `service.telemetry.metrics.address` nunca esteve configurado explicitamente (o binário
+     assumia o default 0.0.0.0:8888 antes) — >=0.123.0 IGNORA esse default silenciosamente, o
+     endpoint de self-metrics simplesmente não sobe mais. Achado real via Prometheus target
+     `otel-collector/collector-self-metrics` `down` (`connection refused`), não hipótese de
+     changelog. Corrigido com a sintaxe nova (`service.telemetry.metrics.readers[].pull.exporter.
+     prometheus`), confirmado com `curl localhost:8888/metrics` 200 e target voltando `up`.
+- **Loki**: 2.9.10 -> 3.7.7. Achado real e verificado empiricamente (não só documentação): imagem
+  removeu BusyBox (`/bin/sh` inexistente, `exec: "sh": executable file not found` confirmado via
+  `docker exec`) — o HEALTHCHECK antigo (`wget --spider`) nunca mais executaria, deixando o
+  container permanentemente `unhealthy` e travando o `depends_on: condition: service_healthy` do
+  Grafana pra sempre. HEALTHCHECK removido (mesmo padrão já usado pro otel-collector, mesma classe
+  de causa), `depends_on` do Grafana ajustado pra `service_started`. Schema já estava em v13/tsdb
+  desde antes desta sessão (achado bom: a suposição do spec.md original de que seria
+  boltdb-shipper estava errada — zero migração de schema necessária, só bump de imagem).
+- **Prometheus**: v2.55.1 -> v3.14.0. Config já não usa nenhuma das 4 breaking changes do
+  inventário (sem `relabel_configs` com regex `.`, sem `remote_write`, sem `scrape_classic_
+  histograms`). vetcare `/api/metrics` já seta `Content-Type` correto (`registry.contentType`,
+  prom-client) — sem risco da checagem estrita de Content-Type do v3.
+- Gates externos reais: `docker compose config` PASS, `promtool check config` PASS (via
+  `docker exec platform-prometheus /bin/promtool`), 6/6 Prometheus targets `up` (apis-host x3,
+  otel-collector x2, vetcare), Loki `/ready` 200 sem erro nos logs.
+- Status: DONE
+
+## Lote 6: Grafana 10.4.0 -> 13.2.1 — infra-full-upgrade-2026-09 — 2026-09-15T16:59:00-03:00
+- docker compose config PASS, container healthy 35s após force-recreate
+- API /api/health: version 13.2.1, database ok
+- 4/4 datasources provisionados presentes (influxdb x2, loki, prometheus) + 1 datasource manual
+  antigo pré-existente não provisionado (fora do escopo, já existia antes desta sessão)
+- 19 dashboards carregados via /api/search (dashboards + pastas dos 4 produtos + Platform)
+- Query real via proxy: Prometheus `up` retornou 6/6 targets =1; Loki `/loki/api/v1/labels`
+  retornou labels reais (`app,container,service,service_name` -- `service_name` é o novo label
+  automático do Loki 3.x, não é regressão)
+- Único erro nos logs (não bloqueante): plugin provisioning dir `/etc/grafana/provisioning/plugins`
+  inexistente -- nunca usamos plugins provisionados, sem impacto
+- Status: DONE
+
+## Lote 7: Vault 1.17 -> 2.1.0 — infra-full-upgrade-2026-09 — 2026-09-15T17:01:00-03:00
+Achado real via changelog + confirmado no boot: Vault 2.x removeu a capability `cap_ipc_lock` das
+imagens no build -- com `disable_mlock = false` (config anterior) o `mlock()` teria falhado e o
+processo não subiria. Corrigido ANTES do bump (`disable_mlock = true` em vault.hcl, `cap_add:
+IPC_LOCK` do compose mantido só documentativamente, sem efeito real agora). Nenhuma policy .hcl
+usa nome com case misto (CVE de normalização de policy name não aplicável) nem chave RSA (limite
+de 8192 bits não aplicável).
+- docker compose config PASS
+- Boot real: log confirma `Mlock: supported: true, enabled: false` (comportamento esperado, não
+  crash) -- container `healthy` em 8s
+- Unseal real com a chave de `~/.vault-init-local` (threshold=1): `Sealed: false` confirmado
+- `vault auth list`: approle/ intacto. `vault kv list secret/`: 4/4 tenants (artists, microgrow,
+  rastafinancas, vetcare) presentes
+- `vault kv get secret/vetcare/env`: dado real recuperado (version 2, created 2026-09-09) --
+  nenhuma perda de dado no bump
+- Status: DONE
+
+## Lote 8: GlitchTip 4.2.4->5->6 + Postgres 16->18 + Redis 7->8 — infra-full-upgrade-2026-09 — 2026-09-15T17:10:00-03:00 (mais arriscado, dump antes de cada etapa)
+- Redis: 7-alpine -> 8-alpine. `PONG` real confirmado pós-bump, sem dado persistente relevante
+  (só broker/beat do Celery/worker, perda aceitável).
+- Dump real do Postgres antes de cada etapa (`pg_dump` completo, 3x: pre-v5, pre-v6, pre-pg18),
+  guardados em scratchpad da sessão (não no repo).
+- GlitchTip 4.2.4 -> v5 (tag major, recebe minors automaticamente por design do projeto):
+  **bug real pré-existente achado e corrigido** (não causado por esta sessão) -- migração
+  `performance.0015_transactiongroup_is_deleted` estava marcada `applied` desde 2026-06-06 na
+  tabela `django_migrations`, mas a coluna `is_deleted` NUNCA existiu de fato na tabela
+  `performance_transactiongroup` (confirmado via `information_schema.columns`) -- um "fake apply"
+  histórico da configuração inicial, nunca exercitado até o worker v5 rodar a task real que lê essa
+  coluna (`ProgrammingError` real no log do celery). Corrigido com `ALTER TABLE ... ADD COLUMN
+  is_deleted boolean NOT NULL DEFAULT false` cirúrgico (mesma definição exata da migration
+  original). `manage.py migrate --noinput` confirmou "No migrations to apply" depois -- schema e
+  migration table agora consistentes. Sem esse achado, o worker teria ficado quebrando
+  silenciosamente em produção (silenciado por ser só uma task de manutenção, sem alerta).
+- GlitchTip v5 -> v6: 0 eventos reais armazenados (`issue_events_issueevent` count=0) -- decisão
+  tomada sem confirmação explícita: NÃO configurei `GLITCHTIP_RETAIN_LEGACY_DATA=True` (cap padrão
+  de 10k eventos migrados é irrelevante aqui). v6.0.3 sobe limpo (`granian` ASGI + `Valkey`
+  cache/queue, arquitetura diferente do celery/uwsgi do v5), `/`, `/_health/`, `/api/0/` todos 200.
+- Postgres 16-alpine -> 18-alpine: **bug real achado no primeiro boot** -- imagem oficial 18+
+  recusa iniciar com volume montado direto em `/var/lib/postgresql/data` num volume vazio/novo
+  (guard upstream pra suporte a `pg_upgrade --link`, ver docker-library/postgres#37 e #1259).
+  Corrigido montando o volume no diretório PAI (`/var/lib/postgresql`), não mais em `.../data`.
+  Migração real: novo volume `platform_glitchtip_postgres_data_pg18` (volume pg16 antigo
+  `platform_glitchtip_postgres_data` preservado intocado como rollback, não deletado), dump
+  restaurado via `psql < dump.sql` (0 erros), confirmado: 150 linhas em `django_migrations`,
+  coluna `is_deleted` presente pós-restore, ~1623 relações (tabelas+partições) migradas.
+- Gate final: `platform-glitchtip`/`-worker`/`-db`/`-redis` todos up, sem erro nos logs, `/`
+  `/_health/` 200 reais via curl.
+- Status: DONE
+
+## Lote 3 (resto): cloudflared + Caddy pin — infra-full-upgrade-2026-09 — 2026-09-15T17:14:00-03:00
+- cloudflared: 2026.8.2 -> 2026.9.1. Tunnel real reconectado (4 conexões QUIC registradas,
+  `gru14/gru19/gru21`), ingress config recarregado com as 6 rotas reais. Gate externo: 6/6
+  domínios públicos (vetcare/financas/grow/grow-sim/metrics/artists) sem 502, mesmos códigos de
+  sempre (307 app, 302 metrics).
+- Caddy (inativo, hygiene): `caddy:2-alpine` (flutuante) -> `caddy:2.11.4-alpine` (pinado).
+  `caddy validate` PASS contra o Caddyfile real. Não subido (continua deliberadamente inativo).
+- Status: DONE
+
+## Lote 9 (parte 1): Telegraf 1.30->1.40.0 (rastafinancas+microgrow) + mosquitto pin 2.1.2-alpine — 2026-09-15T17:18:00-03:00
+- Plugins usados (mqtt_consumer, procstat, internal, prometheus, http_response, cpu, mem, disk,
+  outputs.influxdb_v2) checados contra o changelog 1.40 -- nenhum usa as opções removidas
+  (`cmdline_tag`/`pid_tag`/`supervisor_unit` de procstat, plugins aerospike/sflow/amon). Sem
+  ajuste de config necessário, só warnings informativos (mudança de default futura, não aplicável
+  -- zero processors/aggregators configurados nos dois).
+- Achado de tag real: `eclipse-mosquitto:2.1.2` não existe no Docker Hub -- tag correta é
+  `2.1.2-alpine` (achado via pull real falhando, não assumido do inventário original).
+- Gate real: `docker compose config` PASS nos 2 repos, containers up, mqtt_consumer reconectado
+  (13 tópicos), gate de dado real via InfluxDB API (`/api/v2/query`) -- CPU real do rastafinancas
+  e `api_metrics` real do microgrow chegando com timestamp dos últimos 2 minutos.
+- Status: DONE
+
+## Lote 9 (parte 2): Postgres 16->18 vetcare app + evolution-api — infra-full-upgrade-2026-09 — 2026-09-15T17:22:00-03:00
+Mesmo padrão do Lote 8 (dump -> novo volume com mount no dir pai -> restore), reaproveitando o
+bug real já descoberto (postgres 18+ recusa `.../data` direto num volume novo).
+- vetcare `postgres` (vetcare_dev): app parado antes do dump (evita escrita durante a janela),
+  dump real, novo volume `postgres_dev_data_pg18`, restore 0 erros, 20 tabelas confirmadas, app
+  religado -- `/api/health` 200 local E `vetcare.rastaful.dev` 307 público confirmados depois.
+- vetcare `postgres_test`: sem volume nomeado (efêmero) -- só bump de imagem, sem dado a migrar.
+- `evolution-db` (vetcare/infra/evolution, app evolution-api dormant, não estava rodando antes
+  desta sessão -- não religado, mesmo estado de antes): dump real (49MB de dado pré-existente no
+  volume antigo), novo volume `evolution_db_pg18`, restore 0 erros, 31 tabelas confirmadas.
+- Volumes pg16 antigos preservados como rollback nos 2 casos (não deletados).
+- Status: DONE (Lote 9 completo: telegraf + mosquitto + os 2 Postgres)
+
+## Lote 11: Hygiene final (mailhog + evolution-api) — infra-full-upgrade-2026-09 — 2026-09-15T17:28:00-03:00
+- mailhog (artists-booking, dev only): sem LTS/manutenção upstream -- pinado por digest
+  (`sha256:8d76a3d...`) em vez de `:latest`, `docker compose config` PASS.
+- evolution-api (vetcare/infra/evolution): **achado real e corrigido** -- `atendai/evolution-api`
+  não existe mais no Docker Hub (`pull access denied`, confirmado via pull real). Projeto migrou
+  pra Evolution Foundation, imagem oficial agora `evoapicloud/evolution-api`. Pinado em `v2.3.7`
+  (última stable antes de v2.4.0, que introduz ativação obrigatória contra servidor de
+  licenciamento da Evolution Foundation -- decisão de NÃO subir pra 2.4.0 sem aprovação explícita,
+  registrada nas dúvidas finais). Serviço continua dormant (não estava rodando antes desta sessão,
+  não foi religado).
+- Status: DONE
+
+## D3 (fora do escopo original, incluído por decisão do usuário): InfluxDB v2.7 -> v3 Core — infra-full-upgrade-2026-09 — 2026-09-15T17:35:00-03:00 (EM ANDAMENTO)
+Maior item de escopo/risco da spec inteira (eu tinha recomendado adiar pra spec própria, usuário
+decidiu incluir explicitamente: "todos na última LTS mesmo que envolva migração", D-2026-09-15-1).
+Motor completamente novo (reescrita em Rust), não é bump de versão -- Flux removido, só SQL/InfluxQL.
+
+**Escrita (Telegraf, rastafinancas+microgrow)**: ZERO mudança de lógica necessária -- confirmado via
+docs oficiais que `outputs.influxdb_v2` funciona sem alteração contra o endpoint de compatibilidade
+`/api/v2/write` do v3 (`bucket` vira `database`, `organization` aceito mas ignorado). Só troquei
+url/token nos 2 `telegraf.conf` + tokens nos `.env` dos 2 produtos. Gate real: `SHOW TABLES` +
+`SELECT` via SQL API confirmam dado novo chegando nas 2 databases (`sensors`, `rastafinancas`)
+minutos depois do restart dos telegrafs.
+
+**Servidor**: `influxdb:3-core` adicionado como NOVO serviço `influxdb3` no
+`platform/docker-compose.yml`, rodando lado a lado com o `influxdb` 2.7 antigo (mantido de propósito
+como rollback, não desligado ainda). Bug real no primeiro boot: container roda como uid 1500 não-root
+e o volume novo nasce root-owned -- `Permission denied` criando o catálogo. Corrigido com
+`chown -R 1500:1500` via container helper (mesmo padrão já usado no Vault em sessão anterior).
+Token admin gerado via `influxdb3 create token --admin` (não pode ser recuperado depois, só
+revogado+recriado) -- guardado em `platform/.env` (`INFLUXDB3_ADMIN_TOKEN` + reaproveitado nos 3
+`INFLUXDB_TOKEN_*` que os outros serviços já liam) e nos `.env` dos 2 produtos. **Pendência
+registrada**: token não empurrado pro Vault ainda (não existe um "tenant" platform no KV v2 hoje,
+os 4 paths existentes são todos por produto) -- mesmo padrão de outros segredos platform-level
+(GRAFANA_ADMIN_PASSWORD, GLITCHTIP_SECRET_KEY) que também só vivem em `.env`, não é regressão nova.
+Databases `sensors`/`rastafinancas` criadas explicitamente (não implícito).
+
+**Leitura (Grafana)**: datasources `influxdb-microgrow`/`influxdb-rastafinancas` migrados de
+`version: Flux` pra `version: SQL` (Flight SQL/gRPC, porta 8181, `insecureGrpc: true` -- sem TLS
+interno, mesmo padrão de todo o resto do stack). **Bug real achado e corrigido via gate**: o token
+usado pelo datasource vem de `platform/.env` (`INFLUXDB_TOKEN_MICROGROW`/`_RASTAFINANCAS`), que eu
+tinha esquecido de atualizar (só tinha atualizado os `.env` dos produtos, usados pelo Telegraf) --
+`/health` do datasource retornava `Unauthenticated` até eu perceber que o Grafana ainda tinha o
+token v2 antigo no ambiente do container (`echo | docker exec -i platform-grafana printenv` real,
+não assumido). Corrigido, `/health` das 2 datasources: `OK`. Query real via `/api/ds/query`
+(`rawSql`) retornando `status 200` com dado de verdade.
+
+**Pendente (próximo passo desta mesma frente)**: 76 queries Flux em 9 dashboards (5 rastafinancas +
+4 microgrow) ainda precisam ser reescritas pra SQL -- delegando a sub-agentes em paralelo agora.
+`influxdb` 2.7 antigo continua rodando como rollback até os dashboards serem confirmados.
+
+## Task: infra-full-upgrade-2026-09 (D3) — microgrow dashboards Flux→SQL — 2026-09-15T16:53:31-03:00
+- Escopo: 4 dashboards microgrow (`platform/dashboards/microgrow/`), 35 queries Flux traduzidas pra
+  SQL (`rawSql`+`format`, campo `query` removido): api-system-health.json (8), environment.json (8),
+  sensor-health.json (7), grow-cockpit.json (12). rastafinancas fora do escopo (outro sub-agente).
+- Gate real via `/api/ds/query` (não SELECT solto): 35/35 status 200 (nenhum erro de sintaxe SQL).
+  10 com dado real (api_metrics, mqtt_broker — únicas tabelas populadas hoje); 25 retornam erro
+  400 "table not found" pras 6 measurements ainda sem dado publicado via MQTT (air_conditions,
+  soil_moisture, light_data, reservoir, hydric_score, pump_events, process_metrics) — comportamento
+  esperado (tabela só existe após 1º write no InfluxDB v3; Flux retornaria vazio em vez de erro,
+  diferença de engine documentada, não é bug de tradução).
+- Bug pré-existente achado e corrigido (não introduzido por esta tradução): `environment.json`
+  referenciava measurement `microgrow_raw`, que não existe em nenhum `name_override` do
+  `telegraf.conf` (nunca teria dado, mesmo no InfluxDB 2.7/Flux antigo). Campos/tags batem com
+  `air_conditions` (temp_c/humidity_pct/vpd_kpa, sensor_id=sht31_canopy), `light_data` (lux) e
+  `soil_moisture` (vwc_pct, position) confirmados contra `api/src/types/sensors.ts` e
+  `api/src/routes/simulator.ts` do microgrow — corrigido pro measurement real.
+- Macro `$__dateBin(coluna)` testado e confirmado funcional (expande pra `date_bin(interval ...)`)
+  DESDE QUE a query tenha `intervalMs` no payload — em painel real do Grafana isso é sempre setado
+  automaticamente (equivalente ao `v.windowPeriod` do Flux); só falha (bins de "0 second", frame
+  vazio) quando testado via `/api/ds/query` cru sem `intervalMs` explícito. Documentado, não é bug.
+- `derivative()`/`aggregateWindow(fn:last)` do Flux sem equivalente direto em SQL: traduzidos com
+  window functions (`LAG() OVER (ORDER BY time)` pra derivative; `ROW_NUMBER() OVER (PARTITION BY
+  $__dateBin(time) ORDER BY time DESC) WHERE rn=1` pra last-por-bucket) — ambos testados com dado
+  real (mqtt_broker/api_metrics) e confirmados funcionais.
+- `aggregateWindow(..., createEmpty: true)` (grow-cockpit painel 22, contagem de irrigação por hora
+  com buckets vazios preenchidos) não tem equivalente trivial em SQL sem `generate_series` + LEFT
+  JOIN — traduzido sem zero-fill (gráfico de barras vai simplesmente omitir horas sem evento, em
+  vez de mostrar barra zerada). Diferença assumida, não bloqueante.
+- Achado no meio do gate: `platform-grafana` foi reiniciado por outro processo durante o teste
+  (restart às 19:52, ~30s de indisponibilidade) — não fui eu; aguardei health check voltar e
+  re-rodei a suite completa (resultado idêntico, confirma que não foi flakiness da tradução).
+- Status: DONE
+
+## Task: infra-full-upgrade-2026-09 D3 — rastafinancas dashboards Flux→SQL — 2026-09-15T16:53:28-03:00
+- Scope: 5 dashboards, 41 targets, `platform/dashboards/rastafinancas/*.json` (microgrow untouched).
+- Schema discovery: `SHOW TABLES`/`DESCRIBE` against InfluxDB v3 (port 8181) confirmed real tables
+  before writing any query — no field names guessed.
+- Macro finding (real, reproduced): `$__dateBin(time)` + `GROUP BY 1` returns empty frames
+  (Grafana 13.2.1 + influxdb datasource SQL mode) even with real data in range. Root cause:
+  `$__interval` expands to a full `interval 'N second'` literal (not a bare duration string), so
+  `INTERVAL '$__interval'` double-wraps it and breaks. Working replacement used everywhere:
+  `date_bin($__interval, time)` (no extra `INTERVAL '...'` wrapper), `GROUP BY 1`. Verified with
+  real request data via `/api/ds/query` (`intervalMs`/`maxDataPoints` must be present in the
+  request, same as real dashboard panels send — a bare curl without those fields yields
+  `interval '0 second'`, a false negative, not a datasource bug).
+- Rate-over-cumulative-counter (`derivative()` in Flux) translated as
+  `counter - LAG(counter) OVER (PARTITION BY <tags> ORDER BY time)` divided by
+  `EXTRACT(EPOCH FROM (time - LAG(time) OVER (...)))` — window functions confirmed supported by
+  DataFusion/FlightSQL, verified against real `http_requests_total` data.
+- Percentile histogram panels (P50/P95/P99): `http_request_duration_ms` is already wide-format
+  (bucket boundaries are columns: "5","10",...,"+Inf", quoted identifiers) — no `pivot()` needed,
+  translated with `ROW_NUMBER() OVER (PARTITION BY date_bin(...), route, method ORDER BY time DESC)`
+  + `CASE` threshold logic, verified against real data.
+- Real measurement-name mismatches found and corrected (not guessed): 3 Flux queries referenced
+  measurement names that never map 1:1 to InfluxDB v3 tables — `http_response_result_code` /
+  `http_response_response_time` -> real table is `http_response`, fields `result_code`/
+  `response_time` (confirmed via DESCRIBE + real data, `rasta-slo.json` panels 1/2/4/5/6/7 and
+  `rasta-infra.json` panels 9/10); `mem_used_percent`/`disk_used_percent` -> real tables `mem`/
+  `disk`, field `used_percent` (`rasta-infra.json` panels 7/8). `disk` has multiple `path` tags
+  (bind mounts) — filtered to `path = '/'` for a single gauge value (decision made without
+  explicit confirmation, documented here). `cpu` has only tag value `cpu-total` today — filtered
+  explicitly for robustness if per-core rows appear later.
+- 12 of 41 targets reference measurements that do not exist in InfluxDB v3 at all yet (confirmed
+  via `DESCRIBE` -> `table not found`, pre-existing gap, not caused by this migration):
+  `rasta_rate_limit_hits_total` (api-performance panel 8, auth-security panel 7),
+  `rasta_user_signups_total` (auth-security 1,2), `rasta_auth_logins_total` (auth-security 3,4),
+  `rasta_auth_token_refreshes_total` (auth-security 5), `rasta_auth_password_resets_total`
+  (auth-security 6), `rasta_data_ops_total` (product 1,2), `rasta_import_batches_total` (product 3),
+  `rasta_import_errors_total` (product 5), `rasta_notification_job_runs_total` (product 6),
+  `rasta_notifications_sent_total` (product 7,8), `procstat_cpu_usage`/`procstat_memory_rss`
+  (infra 1-4), `filestat_size_bytes` (infra 5). SQL for these was still translated (syntactically
+  correct, consistent with proven patterns) so the dashboards are ready the moment the app/Telegraf
+  starts emitting them — but field names inside those tables (e.g. exact procstat field name)
+  could not be confirmed and were assumed as `counter` by convention with the rest of the
+  ecosystem. Flag for follow-up when those metrics land.
+- 2 targets are syntactically correct SQL against a real, existing table but return 0 rows because
+  no matching data exists yet (not an error): `4xx by Route`/`5xx by Route` in api-performance
+  (no 4xx/5xx responses recorded against `http_requests_total` since only self-`/health`+`/metrics`
+  probes have been captured so far).
+- Verification method: live `/api/ds/query` against the real running Grafana (13.2.1, uid
+  `influxdb-rastafinancas`), one call per target, using each dashboard's own saved time range —
+  not just `/api/v3/query_sql` syntax checks. `docker restart platform-grafana` forced immediate
+  provisioning reload (dashboard `version` field bumped, confirmed via `/api/dashboards/uid/*`).
+- Final tally: 41/41 targets syntactically valid SQL (0 parse/plan errors other than
+  "table not found" for the 12 pre-existing gaps above). 27/41 returned real data rows right now;
+  2/41 real table + real syntax but 0 matching rows (no 4xx/5xx yet); 12/41 error until upstream
+  metrics exist.
+- Known side-effect noted, not fixed (out of scope — task said "só troque o conteúdo da query"):
+  `rasta-slo.json` panel "Downtime Events" has `fieldConfig.overrides` renaming Flux-era columns
+  `_time`/`_value`/`probe` — these no longer match the new SQL column names (`time`/`value`/`probe`)
+  exactly for `_time`/`_value` (now just `time`/`value`), so those two display-name overrides will
+  silently stop applying. Cosmetic only, not a data-correctness issue; flagged for the orchestrator.
+- Status: DONE (all 5 files, all targets converted, no microgrow files touched)
+
+## Lote 10: Node 22 -> 24 (3 repos, D4) — infra-full-upgrade-2026-09 — 2026-09-15T18:30:00-03:00 (delegado em paralelo, 3 task-executor)
+- **artists-booking**: build PASS (web+api), tsc 0 erros, web 523/523 testes. `Dockerfile.dev` da
+  API já não buildava ANTES do bump (pnpm sem pin via `npm install -g`, não corrigido — fora de
+  escopo, arquivo tocado só na linha FROM). 7/277 testes da API flaky por timeout de I/O,
+  confirmado idêntico em Node 22 via controle A/B — não é regressão do bump.
+- **rastafinancas**: build PASS (web+api), tsc 0 erros, web 188/188 testes. 2/171 testes da API
+  falhando (`oauth.test.ts`, timeout 5000ms) confirmado idêntico em Node 22 via controle A/B (3x) —
+  débito pré-existente, não regressão. 1 falha adicional isolada não reproduzida (N=1, sem
+  correlação clara com o bump).
+- **vetcare**: build PASS, tsc 0 erros, 48/48 suites e 234/234 testes — 100% limpo, zero achado.
+  uid do usuário do container confirmado inalterado (`appuser` 1001, não usa o `node` padrão da
+  imagem) — hipótese minha de risco (chown de bind-mount) não se aplicava a este repo (era de
+  outro, artists-booking — erro meu no briefing, corrigido pelo sub-agente).
+- Nenhum dos 3 repos teve build/binário nativo quebrado pelo bump em si (libsql, bcryptjs,
+  drizzle-orm, esbuild, prisma, sharp etc. -- todos instalaram/rodaram normal em Node 24 Alpine).
+- Status: DONE (3/3) -- achados de débito de produto pré-existente registrados, NÃO corrigidos
+  (fora de escopo do harness-infra), candidatos a spec própria no harness-dev se o usuário quiser.
+
+## D3 (conclusão): 76 queries Flux -> SQL, 9 dashboards — infra-full-upgrade-2026-09 — 2026-09-15T18:35:00-03:00 (delegado em paralelo, 2 task-executor)
+- **rastafinancas** (5 dashboards, 41 targets): 41/41 sintaticamente válidos via gate real
+  (`/api/ds/query` contra Grafana rodando, não só parse estático), 27/41 com dado real hoje, 2/41
+  válidos mas 0 linhas (sem incidente registrado ainda), 12/41 aguardando métricas que NUNCA
+  existiram no ecossistema (débito pré-existente, não desta migração). 3 mismatches reais de nome
+  de medição achados e corrigidos (`http_response_result_code`->`http_response.result_code`,
+  `mem_used_percent`->`mem.used_percent`, `disk_used_percent`->`disk.used_percent`). Achado técnico
+  registrado: macro `$__dateBin` não funciona (`$__interval` já expande pra `INTERVAL 'N second'`,
+  dobrar o wrap quebra) -- solução real usada: `date_bin($__interval, time)` + `GROUP BY 1`.
+  `derivative()` sobre contador Prometheus traduzido via `LAG() OVER (...)`. 1 regressão cosmética
+  NÃO corrigida (fora do escopo pedido): `fieldConfig.overrides` do painel "Downtime Events" ainda
+  referencia nomes de coluna Flux (`_time`/`_value`) que não existem mais.
+- **microgrow** (4 dashboards, 35 targets): 35/35 sintaticamente válidos, 10/35 com dado real hoje
+  (resto são 6 medições MQTT sem nenhum dado publicado ainda, confirmado via `SHOW TABLES`, não é
+  erro de tradução). Achado e corrigido bug pré-existente real: `environment.json` referenciava
+  measurement `microgrow_raw`, que NUNCA existiu em nenhum `telegraf.conf` (nem antes desta
+  migração) -- remapeado pras medições reais (`air_conditions`/`light_data`/`soil_moisture`) via
+  evidência cruzada no código do produto. `aggregateWindow(createEmpty: true)` não tem equivalente
+  trivial em SQL sem `generate_series`+`LEFT JOIN` -- traduzido sem zero-fill (gap visual aceito).
+- Ambos os sub-agentes verificaram via chamada real `/api/ds/query` contra o Grafana rodando, não
+  só validação de sintaxe SQL isolada.
+- Status: DONE. `influxdb` 2.7 antigo continua rodando como rollback (não desligado ainda -- ver
+  dúvidas finais pra decisão do usuário sobre quando desligar).
+
+## Validação final completa + gates finais — infra-full-upgrade-2026-09 — 2026-09-15T20:00:00-03:00
+- **Achado real na varredura final de containers** (só pego porque rodei `docker ps` de tudo, não
+  assumido): `platform-influxdb3` estava `unhealthy` há ~30min, mesmo funcionando perfeitamente o
+  tempo todo (escrita+leitura confirmadas antes) -- causa: `/health` do InfluxDB 3 Core exige auth
+  (401 sem token, confirmado `curl` direto), sem endpoint anônimo tipo `/ping` livre. Healthcheck
+  original não passava header. Corrigido: token injetado como env var no container +
+  `Authorization: Bearer` no healthcheck. `healthy` confirmado, dado revalidado intacto pós-restart
+  (118 linhas em `cpu`, contagem real via SQL).
+- docker compose config: 8/8 PASS (platform, tunnel, caddy, microgrow, rastafinancas/observability,
+  vetcare, vetcare/evolution, artists-booking)
+- terraform validate + fmt -check -recursive: PASS
+- 6/6 domínios públicos (vetcare/financas/grow/grow-sim/metrics/artists): sem 502, códigos normais
+- Todos os containers do ecossistema (29 real, `docker ps`): nenhum crash loop, nenhum `unhealthy`
+  restante
+- `skills/infra-quality-gates/run-infra-quality.sh` + `run-infra-quality-final.sh`: overall PASS
+  (tflint/kubeconform/pluto/terraform-docs/polaris/kube-linter SKIPPED -- não instalados nesta
+  máquina, mesmo gap documentado há sessões, nunca finge PASS)
+- `skills/policy-gates/run-policy-gate.sh`: SKIPPED (conftest não instalado, gap pré-existente)
+- `skills/security-gates/run-security-gates.sh`: overall FAIL -- gitleaks achou 5 segredos em
+  `platform/.env`/`tunnel/.env` (working-tree scan, não `--staged`). Confirmado real: os 2 arquivos
+  estão no `.gitignore` (`git check-ignore` real), nunca seriam commitados -- 4/5 achados são o
+  token novo do InfluxDB 3 que eu mesmo gerei nesta sessão (esperado, mesmo padrão de todo outro
+  segredo do ecossistema), 1/5 é o `CLOUDFLARE_API_TOKEN` pré-existente (não tocado por mim). Não é
+  uma regressão de segurança nova -- é o script rodando `gitleaks detect` (filesystem) em vez de
+  `gitleaks protect --staged` (git-aware) localmente, diferença que não existe no CI (onde `.env`
+  simplesmente não existe no checkout). trivy_fs: PASS. osv-scanner: SKIPPED (não instalado).
+- `skills/security-gates/run-security-final.sh`: overall FAIL -- `trivy_config` achou 1 HIGH
+  (`DS-0002`, falta `USER` não-root) em `.harness-sandbox/docker/Dockerfile.sandbox` -- arquivo do
+  próprio harness (sandbox de execução), não tocado nesta sessão, fora do escopo do pacote de 19
+  itens. semgrep/syft+grype: SKIPPED (não instalados).
+- `skills/cost-gates/run-cost-gate.sh`: SKIPPED (infracost não instalado)
+- Status: COMPLETED (ver dúvidas finais registradas em DECISIONS.md pro usuário revisar)

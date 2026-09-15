@@ -123,7 +123,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_user_signups_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> last()\n  |> yield(name: \"last\")"
+          "rawSql": "SELECT time, counter AS value FROM rasta_user_signups_total WHERE $__timeFilter(time) ORDER BY time DESC LIMIT 1",
+          "format": "table"
         }
       ]
     },
@@ -169,7 +170,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_user_signups_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> group(columns: [\"provider\"])\n  |> last()\n  |> yield(name: \"by_provider\")"
+          "rawSql": "WITH ranked AS (\n  SELECT provider, counter,\n    ROW_NUMBER() OVER (PARTITION BY provider ORDER BY time DESC) AS rn\n  FROM rasta_user_signups_total\n  WHERE $__timeFilter(time)\n)\nSELECT provider, counter AS value FROM ranked WHERE rn = 1",
+          "format": "table"
         }
       ]
     },
@@ -231,7 +233,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "success = from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_auth_logins_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"status\"] == \"success\")\n  |> last()\n\ntotal = from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_auth_logins_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> last()\n\nunion(tables: [success, total])\n  |> yield(name: \"login_success_rate\")"
+          "rawSql": "WITH ranked AS (\n  SELECT status, counter,\n    ROW_NUMBER() OVER (PARTITION BY status ORDER BY time DESC) AS rn\n  FROM rasta_auth_logins_total\n  WHERE $__timeFilter(time)\n),\nlast_vals AS (SELECT * FROM ranked WHERE rn = 1)\nSELECT\n  (SELECT SUM(counter) FROM last_vals WHERE status = 'success') * 100.0\n  / NULLIF((SELECT SUM(counter) FROM last_vals), 0) AS value",
+          "format": "table"
         }
       ]
     },
@@ -280,7 +283,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_auth_logins_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"status\"] == \"failure\")\n  |> derivative(unit: 1h, nonNegative: true)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"failures_per_hour\")"
+          "rawSql": "WITH deltas AS (\n  SELECT date_bin($__interval, time) AS time,\n    counter - LAG(counter) OVER (ORDER BY time) AS delta,\n    EXTRACT(EPOCH FROM (time - LAG(time) OVER (ORDER BY time))) AS dt\n  FROM rasta_auth_logins_total\n  WHERE $__timeFilter(time) AND status = 'failure'\n)\nSELECT time, AVG(delta / dt * 3600) AS value\nFROM deltas\nWHERE dt > 0 AND delta >= 0\nGROUP BY time\nORDER BY time",
+          "format": "time_series"
         }
       ]
     },
@@ -325,7 +329,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_auth_token_refreshes_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> derivative(unit: 1s, nonNegative: true)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"refresh_rate\")"
+          "rawSql": "WITH deltas AS (\n  SELECT date_bin($__interval, time) AS time,\n    counter - LAG(counter) OVER (ORDER BY time) AS delta,\n    EXTRACT(EPOCH FROM (time - LAG(time) OVER (ORDER BY time))) AS dt\n  FROM rasta_auth_token_refreshes_total\n  WHERE $__timeFilter(time)\n)\nSELECT time, AVG(delta / dt) AS value\nFROM deltas\nWHERE dt > 0 AND delta >= 0\nGROUP BY time\nORDER BY time",
+          "format": "time_series"
         }
       ]
     },
@@ -369,7 +374,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_auth_password_resets_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> last()\n  |> yield(name: \"last\")"
+          "rawSql": "SELECT time, counter AS value FROM rasta_auth_password_resets_total WHERE $__timeFilter(time) ORDER BY time DESC LIMIT 1",
+          "format": "table"
         }
       ]
     },
@@ -418,7 +424,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"rasta_rate_limit_hits_total\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"route\"] =~ /^\\/auth/)\n  |> derivative(unit: 1m, nonNegative: true)\n  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)\n  |> yield(name: \"auth_rate_limit\")"
+          "rawSql": "WITH deltas AS (\n  SELECT date_bin($__interval, time) AS time, route,\n    counter - LAG(counter) OVER (PARTITION BY route ORDER BY time) AS delta\n  FROM rasta_rate_limit_hits_total\n  WHERE $__timeFilter(time) AND route LIKE '/auth%'\n)\nSELECT time, SUM(delta) AS value\nFROM deltas\nWHERE delta >= 0\nGROUP BY time\nORDER BY time",
+          "format": "time_series"
         }
       ]
     }

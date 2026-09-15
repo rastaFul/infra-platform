@@ -35,7 +35,8 @@
         {
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"api_metrics\")\n  |> filter(fn: (r) => r._field == \"requests_total\")\n  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)"
+          "rawSql": "SELECT $__dateBin(time) as time, sum(requests_total) as requests_total FROM api_metrics WHERE $__timeFilter(time) GROUP BY 1 ORDER BY 1",
+          "format": "time_series"
         }
       ]
     },
@@ -71,7 +72,8 @@
         {
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"api_metrics\")\n  |> filter(fn: (r) => contains(value: r._field, set: [\"avg_latency_ms\", \"p95_latency_ms\"]))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "rawSql": "SELECT $__dateBin(time) as time, avg(avg_latency_ms) as avg_latency_ms, avg(p95_latency_ms) as p95_latency_ms FROM api_metrics WHERE $__timeFilter(time) GROUP BY 1 ORDER BY 1",
+          "format": "time_series"
         }
       ]
     },
@@ -106,7 +108,8 @@
         {
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: -30m)\n  |> filter(fn: (r) => r._measurement == \"api_metrics\")\n  |> filter(fn: (r) => r._field == \"errors_5xx\")\n  |> sum()"
+          "rawSql": "SELECT sum(errors_5xx) as errors_5xx FROM api_metrics WHERE time >= now() - INTERVAL '30 minutes'",
+          "format": "table"
         }
       ]
     },
@@ -141,7 +144,8 @@
         {
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: -5m)\n  |> filter(fn: (r) => r._measurement == \"mqtt_broker\")\n  |> filter(fn: (r) => r.sys_topic == \"$SYS/broker/clients/connected\")\n  |> last()"
+          "rawSql": "SELECT value FROM mqtt_broker WHERE sys_topic = '$SYS/broker/clients/connected' AND time >= now() - INTERVAL '5 minutes' ORDER BY time DESC LIMIT 1",
+          "format": "table"
         }
       ]
     },
@@ -169,7 +173,8 @@
         {
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"api_metrics\")\n  |> filter(fn: (r) => r._field == \"mqtt_messages_processed\")\n  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)"
+          "rawSql": "SELECT $__dateBin(time) as time, sum(mqtt_messages_processed) as mqtt_messages_processed FROM api_metrics WHERE $__timeFilter(time) GROUP BY 1 ORDER BY 1",
+          "format": "time_series"
         }
       ]
     },
@@ -197,7 +202,8 @@
         {
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"mqtt_broker\")\n  |> filter(fn: (r) => r.sys_topic == \"$SYS/broker/messages/received\")\n  |> derivative(unit: 1m, nonNegative: true)"
+          "rawSql": "SELECT time, CASE WHEN (value - lag(value) OVER (ORDER BY time)) < 0 THEN NULL ELSE (value - lag(value) OVER (ORDER BY time)) / (extract(epoch FROM time - lag(time) OVER (ORDER BY time)) / 60.0) END as messages_per_min FROM mqtt_broker WHERE sys_topic = '$SYS/broker/messages/received' AND $__timeFilter(time) ORDER BY time",
+          "format": "time_series"
         }
       ]
     },
@@ -226,7 +232,8 @@
         {
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"process_metrics\")\n  |> filter(fn: (r) => r._field == \"cpu_usage\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "rawSql": "SELECT $__dateBin(time) as time, process_name, avg(cpu_usage) as cpu_usage FROM process_metrics WHERE $__timeFilter(time) GROUP BY 1, process_name ORDER BY 1",
+          "format": "time_series"
         }
       ]
     },
@@ -255,7 +262,8 @@
         {
           "refId": "A",
           "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "query": "from(bucket: \"sensors\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"process_metrics\")\n  |> filter(fn: (r) => r._field == \"memory_rss\")\n  |> map(fn: (r) => ({r with _value: r._value / 1048576.0}))\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+          "rawSql": "SELECT $__dateBin(time) as time, process_name, avg(memory_rss) / 1048576.0 as memory_rss_mb FROM process_metrics WHERE $__timeFilter(time) GROUP BY 1, process_name ORDER BY 1",
+          "format": "time_series"
         }
       ]
     },

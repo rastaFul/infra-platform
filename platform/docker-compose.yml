@@ -37,14 +37,20 @@ volumes:
   prometheus_data:
     name: platform_prometheus_data
   glitchtip_postgres_data:
-    name: platform_glitchtip_postgres_data
+    name: platform_glitchtip_postgres_data # pg16, kept as rollback, unused after Lote 8
+  glitchtip_postgres_data_pg18:
+    name: platform_glitchtip_postgres_data_pg18
   glitchtip_uploads:
     name: platform_glitchtip_uploads
+  influx3_data:
+    name: platform_influx3_data
+  influx3_plugins:
+    name: platform_influx3_plugins
 
 services:
   # ── Secrets ────────────────────────────────────────────────────────
   vault:
-    image: hashicorp/vault:1.17
+    image: hashicorp/vault:2.1.0
     container_name: platform-vault
     networks:
       - platform_net
@@ -71,7 +77,7 @@ services:
 
   # ── Telemetry pipeline ────────────────────────────────────────────
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.103.0
+    image: otel/opentelemetry-collector-contrib:0.160.0
     container_name: platform-otel-collector
     networks:
       - platform_net
@@ -94,7 +100,7 @@ services:
     restart: always
 
   prometheus:
-    image: prom/prometheus:v2.55.1
+    image: prom/prometheus:v3.14.0
     container_name: platform-prometheus
     networks:
       - platform_net
@@ -114,6 +120,9 @@ services:
       start_period: 15s
     restart: always
 
+  # kept running deliberately as rollback during the v3 migration below
+  # (D3, infra-full-upgrade-2026-09) -- decommission only after dashboards
+  # + telegraf writes are confirmed healthy against influxdb3 for a while.
   influxdb:
     image: influxdb:2.7
     container_name: platform-influxdb
@@ -139,8 +148,47 @@ services:
       start_period: 30s
     restart: always
 
+  # InfluxDB 3 Core (2026-09-15, infra-full-upgrade-2026-09, D3 -- full
+  # engine migration, not a version bump: Rust rewrite, Flux removed,
+  # SQL/InfluxQL only). Write path unchanged for Telegraf (`/api/v2/write`
+  # compat endpoint accepts outputs.influxdb_v2 as-is, confirmed via
+  # InfluxData docs). Query path (Grafana dashboards) rewritten Flux->SQL,
+  # see dashboards/*.json and datasources.yml.
+  influxdb3:
+    image: influxdb:3-core
+    container_name: platform-influxdb3
+    networks:
+      - platform_net
+    ports:
+      - "127.0.0.1:8181:8181"
+    volumes:
+      - influx3_data:/var/lib/influxdb3/data
+      - influx3_plugins:/var/lib/influxdb3/plugins
+    command:
+      - influxdb3
+      - serve
+      - --node-id=platform-influxdb3
+      - --object-store=file
+      - --data-dir=/var/lib/influxdb3/data
+      - --plugin-dir=/var/lib/influxdb3/plugins
+    environment:
+      - INFLUXDB3_ADMIN_TOKEN=${INFLUXDB3_ADMIN_TOKEN}
+    healthcheck:
+      # /health requires auth on InfluxDB 3 Core (no anonymous endpoint at
+      # all, confirmed real -- unauthenticated curl gets 401, container
+      # showed `unhealthy` for the container's whole lifetime until this
+      # fix even though it was fully functional the entire time, same class
+      # of "healthcheck lies" bug as otel-collector/loki above but for the
+      # opposite reason -- here it's a real endpoint, just needs a header).
+      test: ["CMD-SHELL", "curl -f -H \"Authorization: Bearer $$INFLUXDB3_ADMIN_TOKEN\" http://localhost:8181/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: always
+
   loki:
-    image: grafana/loki:2.9.10
+    image: grafana/loki:3.7.7
     container_name: platform-loki
     networks:
       - platform_net
@@ -150,17 +198,20 @@ services:
       - loki_data:/loki
       - ./loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
     command: -config.file=/etc/loki/local-config.yaml
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
+    # No Docker-level HEALTHCHECK since 3.7.7 (bump 2026-09-15, infra-full-
+    # upgrade-2026-09 Lote 3+5): Loki removed BusyBox from its image as of
+    # 3.5.8 (no /bin/sh, wget, cat, ls -- verified empirically against this
+    # image, same class of issue already documented above for
+    # otel-collector). `wget --spider` used here before 3.x can no longer
+    # exec inside the container. Liveness for `grafana`'s depends_on is now
+    # `service_started` (see below), not `service_healthy` -- Grafana's
+    # Loki datasource just retries on first dashboard load if not ready yet,
+    # not fatal at boot, same tradeoff otel-collector already accepted.
     restart: always
 
   # ── Dashboards ─────────────────────────────────────────────────────
   grafana:
-    image: grafana/grafana:10.4.0
+    image: grafana/grafana:13.2.1
     container_name: platform-grafana
     networks:
       - platform_net
@@ -170,7 +221,7 @@ services:
       influxdb:
         condition: service_healthy
       loki:
-        condition: service_healthy
+        condition: service_started # no HEALTHCHECK since 3.7.7, see comment above
       prometheus:
         condition: service_healthy
     volumes:
@@ -199,12 +250,24 @@ services:
 
   # ── Error tracking ─────────────────────────────────────────────────
   glitchtip-db:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: platform-glitchtip-db
     networks:
       - platform_net
     volumes:
-      - glitchtip_postgres_data:/var/lib/postgresql/data
+      # New volume (2026-09-15, infra-full-upgrade-2026-09 Lote 8): Postgres
+      # major version bumps are not in-place, need a fresh initdb + restore.
+      # Old volume `platform_glitchtip_postgres_data` (pg16 data files) kept
+      # untouched as rollback, not deleted -- see execution.md for the
+      # rollback procedure if this needs reverting.
+      #
+      # Mount point changed to the PARENT dir (`/var/lib/postgresql`, not
+      # `.../data`) -- real bug hit on first boot: postgres 18+ official
+      # images refuse to start with a volume mounted directly at
+      # `/var/lib/postgresql/data` on a fresh/empty volume (guard added
+      # upstream for pg_upgrade --link support, see docker-library/postgres
+      # #37 and #1259). The image manages the `data` subdirectory itself now.
+      - glitchtip_postgres_data_pg18:/var/lib/postgresql
     environment:
       POSTGRES_DB: glitchtip
       POSTGRES_USER: glitchtip
@@ -217,7 +280,7 @@ services:
     restart: always
 
   glitchtip-redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     container_name: platform-glitchtip-redis
     networks:
       - platform_net
@@ -227,7 +290,7 @@ services:
     # Pinned (not :latest) — v4.2.4+ confirmed multi-arch/arm64, required
     # for the oci-free environment (ADR 007). Never bump without re-running
     # the docker build/compose gate.
-    image: glitchtip/glitchtip:v4.2.4
+    image: glitchtip/glitchtip:v6
     container_name: platform-glitchtip
     networks:
       - platform_net
@@ -252,7 +315,7 @@ services:
     restart: always
 
   glitchtip-worker:
-    image: glitchtip/glitchtip:v4.2.4
+    image: glitchtip/glitchtip:v6
     container_name: platform-glitchtip-worker
     networks:
       - platform_net

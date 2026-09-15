@@ -16,7 +16,7 @@
 
 services:
   cloudflared:
-    image: cloudflare/cloudflared:2026.8.2
+    image: cloudflare/cloudflared:2026.9.1
     container_name: platform-tunnel
     # Credentials file on the host is 0400, owned by rodrigo (uid 1000) —
     # the image's default nonroot user can't read it. Run as the same uid

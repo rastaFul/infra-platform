@@ -1,6 +1,71 @@
 # STATE
 
-## Session: Infra Strategy — Phase 0 Execution
+## Session: infra-full-upgrade-2026-09
+## Status: COMPLETED
+## Last updated: 2026-09-15
+
+## Sessão 2026-09-15 — infra-full-upgrade-2026-09 APPROVED, execução iniciada
+Spec aprovada (D-2026-09-15-1). Downtime aceito, sessão única, todos os 19 itens do inventário
+pra última LTS/estável (D2 Loki e D3 InfluxDB tiveram escopo ampliado por pedido explícito do
+usuário — override das minhas recomendações de conter escopo). Plano: 12 lotes sequenciais
+(gate fecha cada um antes do próximo), com sub-agentes `task-executor` em paralelo dentro de
+lotes com itens independentes (Lote 2: 4 produtos Promtail→Alloy; Lote 9: sidecars).
+- Lote 0 (backup+tags): DONE
+- Lote 1 (Terraform CLI 1.16.2 + provider OCI ~>9.0): DONE
+- Lote 2 (Promtail->Alloy, 4 produtos, paralelo via task-executor): DONE (4/4)
+- Lote 3+4+5 combinados (OTEL Collector 0.160.0 + Prometheus v3.14.0 + Loki 3.7.7): DONE — achado
+  de dependência real entre OTEL Collector e Loki (exporter `loki` deletado do binário, só resta
+  OTLP nativo que exige Loki 3.x) forçou tratar os 3 lotes originais como uma unidade de gate.
+  3 bugs reais achados/corrigidos via gate externo: alias `otlphttp` deprecated, self-metrics 8888
+  sumindo silenciosamente (>=0.123.0 ignora `telemetry.metrics.address`), HEALTHCHECK do Loki
+  quebrado por remoção do BusyBox (sem `/bin/sh`) que travaria o `depends_on` do Grafana pra sempre.
+- Lote 6 (Grafana 10.4.0 -> 13.2.1): DONE — API/datasources/19 dashboards confirmados
+- Lote 7 (Vault 1.17 -> 2.1.0): DONE — achado real pré-boot (cap_ipc_lock removido da imagem,
+  disable_mlock=true aplicado ANTES do bump evitou crash), unseal + 4 tenants KV v2 + approle
+  confirmados intactos
+- Lote 8 (GlitchTip 4->5->6 + Postgres 16->18 + Redis 7->8): DONE — 2 bugs reais achados/corrigidos
+  (migration "fake applied" desde 06/2026 nunca exercitada até o worker v5 rodar; imagem postgres
+  18+ recusa volume montado direto em .../data, precisa montar no dir pai). Rollback preservado:
+  volume pg16 antigo intocado, 3 dumps completos guardados.
+- Lote 3 (resto: cloudflared 2026.9.1 + Caddy pin 2.11.4): DONE — 6/6 domínios públicos sem 502
+- Lote 9 (Telegraf 1.40.0 rasta+microgrow, mosquitto 2.1.2-alpine, Postgres 18 vetcare+evolution-api):
+  DONE — achado real de tag (`eclipse-mosquitto:2.1.2` não existe, correto é `2.1.2-alpine`),
+  reaproveitado o fix do mount-point do Postgres 18+ descoberto no Lote 8
+- Lote 10 (Node 22->24, 3 repos): delegado em paralelo a 3 task-executor — IN_PROGRESS, aguardando
+  notificação dos 3
+- Lote 11 (hygiene: mailhog digest pin, evolution-api): DONE — achado real, `atendai/evolution-api`
+  não existe mais no Docker Hub (`pull access denied`), migrado pra `evoapicloud/evolution-api`,
+  pinado em v2.3.7 (não v2.4.0, que exige ativação de licença — ver dúvidas finais)
+- D3 (InfluxDB v2->v3, fora do escopo original, incluído por override explícito do usuário):
+  IN_PROGRESS. Servidor `influxdb3` (InfluxDB 3 Core) rodando lado a lado com o v2.7 antigo
+  (mantido como rollback). Write path (Telegraf, 2 produtos) DONE e confirmado com dado real.
+  Datasources Grafana migrados pra SQL/FlightSQL, `/health` OK, query real via API confirmada.
+  2 bugs reais achados/corrigidos: volume novo root-owned (uid 1500 não-root da imagem, corrigido
+  via chown helper) e token do datasource não atualizado no `platform/.env` (Grafana ainda lia o
+  token v2 antigo, achado via `printenv` real no container). Pendente: 76 queries Flux em 9
+  dashboards (5 rastafinancas + 4 microgrow) sendo reescritas pra SQL AGORA, delegado em paralelo
+  a 2 task-executor — IN_PROGRESS, aguardando notificação. InfluxDB v2.7 antigo continua rodando
+  até dashboards confirmados.
+- Lote 10 (Node 22->24, 3 repos): DONE (3/3) — builds/tsc limpos nos 3, débito de produto
+  pré-existente confirmado via A/B Node22 vs Node24 (não é regressão do bump), registrado em
+  D-2026-09-15-2, não corrigido (fora de escopo do harness-infra)
+- D3 (InfluxDB v2->v3): DONE — 76/76 queries traduzidas (9 dashboards), gate real via API do
+  Grafana. 3 mismatches de nome de medição + 1 measurement inexistente (bug pré-existente) achados
+  e corrigidos. InfluxDB 2.7 antigo mantido rodando como rollback.
+- Validação final completa: 8/8 docker compose config PASS, terraform validate+fmt PASS, 6/6
+  domínios públicos sem 502, 29/29 containers saudáveis (1 achado extra corrigido na varredura
+  final: healthcheck do influxdb3 sem auth header, corrigido). Gates infra-quality/policy/cost:
+  PASS ou SKIPPED (ferramenta ausente, gap antigo). Gates de segurança: FAIL explicável e
+  não-bloqueante (gitleaks = segredos em .env gitignorado; trivy_config = achado pré-existente fora
+  de escopo) — detalhe em D-2026-09-15-2.
+- current task: CONCLUÍDO. Métricas em `.specs/metrics/2026-09-15-infra-full-upgrade.md`, dúvidas
+  em D-2026-09-15-2 (DECISIONS.md) aguardando revisão do usuário.
+
+## Próxima ação: nenhuma pendente desta spec — aguardando usuário revisar as 9 dúvidas de
+D-2026-09-15-2 (destaque: InfluxDB 2.7 antigo ainda ligado, evolution-api parado em v2.3.7 de
+propósito, débito de teste pré-existente nos 3 repos de Node, 2 FAILs de gate explicados).
+
+## Session: Infra Strategy — Phase 0 Execution (histórico anterior)
 ## Status: EXECUTING
 ## Last updated: 2026-09-09
 

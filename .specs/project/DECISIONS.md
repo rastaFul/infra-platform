@@ -1,5 +1,61 @@
 # DECISIONS
 
+## D-2026-09-15-1: `infra-full-upgrade-2026-09` APROVADA — D1-D6 + escopo ampliado (todos LTS, mesmo com migração)
+Usuário aprovou a spec inteira numa sessão só, downtime aceito. Respostas:
+- D1 GlitchTip: hop duplo 4.2.4→5.x→6.x agora (não parar em 5.x).
+- D2 Loki: **override da minha recomendação original** (eu tinha sugerido descartar logs antigos
+  por serem só dev/homolog) — usuário pediu "todos na última LTS mesmo que envolva migração",
+  interpretado como: migrar índice pra schema v13/TSDB de verdade em vez de descartar. Registrado
+  como suposição a confirmar no fechamento (ver dúvidas finais).
+- D3 InfluxDB v2→v3: **override total da minha recomendação** (eu tinha proposto adiar pra spec
+  própria por escopo/risco). Usuário incluiu explicitamente no pacote — Flux vira SQL/InfluxQL,
+  reescreve `telegraf.conf` (outputs), dashboards Grafana e o simulador do microgrow. Maior item de
+  escopo/risco da spec inteira agora. Sinalizado como ponto de atenção nas dúvidas finais.
+- D4 Node 22→24 (artists-booking, rastafinancas, vetcare): bump de Dockerfile é meu, validação de
+  teste de cada app é gate obrigatório; se quebrar, abro spec no harness-dev do repo, não conserto
+  código aqui.
+- D5 mailhog/evolution-api: investigo tag real e pino, sem trocar de ferramenta.
+- D6: tudo numa sessão só, ordem dos lotes como no spec.md, delegando a sub-agentes (`task-executor`)
+  em paralelo onde os itens de um lote são independentes entre si (ex.: Lote 2 por produto, Lote 9
+  sidecars).
+Spec `features/infra-full-upgrade-2026-09/spec.md`: Status DRAFT → APPROVED.
+
+## D-2026-09-15-2: infra-full-upgrade-2026-09 CONCLUÍDA — dúvidas/pendências pro usuário revisar
+Todos os 19 itens do inventário + D3 (InfluxDB v2->v3, escopo ampliado) concluídos, gates finais
+rodados. Ver `.specs/metrics/2026-09-15-infra-full-upgrade.md` pro resumo completo (13 bugs reais
+achados/corrigidos, todos verificados via gate externo). Itens abaixo precisam de decisão ou
+atenção do usuário, não foram resolvidos unilateralmente:
+
+1. **InfluxDB 2.7 antigo ainda rodando** (`platform-influxdb`) como rollback do D3. Decidir quando
+   desligar (sugestão: depois de alguns dias observando os dashboards SQL novos com dado real).
+2. **12/41 queries do rastafinancas + 6/35 medições do microgrow** apontam pra métricas que NUNCA
+   existiram no ecossistema (débito pré-existente, não desta migração) — dashboards ficarão vazios
+   nesses painéis até o produto de fato emitir essas métricas.
+3. **`rasta-slo.json`**: painel "Downtime Events" tem `fieldConfig.overrides` referenciando colunas
+   Flux antigas (`_time`/`_value`) — regressão cosmética de nome de coluna, não corrigida (fora do
+   escopo "só trocar a query").
+4. **Token do InfluxDB 3 sem Vault**: `INFLUXDB3_ADMIN_TOKEN` vive só em `.env` (3 arquivos) — não
+   empurrado pro Vault (não existe um "tenant" platform-level no KV v2 hoje). Mesmo padrão de
+   outros segredos platform-level (`GRAFANA_ADMIN_PASSWORD`, `GLITCHTIP_SECRET_KEY`), não é
+   regressão nova, mas fica registrado como gap.
+5. **evolution-api parado em v2.3.7** (não v2.4.0/latest) de propósito — v2.4.0 exige ativação
+   contra servidor de licenciamento da Evolution Foundation, mudança operacional que não decidi
+   sozinho. Serviço continua dormant (nem estava rodando antes desta sessão).
+6. **Débito de produto pré-existente encontrado pelos bumps de Node** (não corrigido, fora do
+   escopo do harness-infra): `artists-booking/apps/api/Dockerfile.dev` não builda (pnpm sem pin);
+   7/277 testes da API do artists-booking flaky por timeout de I/O; 2/171 testes da API do
+   rastafinancas (`oauth.test.ts`) falhando por timeout — todos confirmados idênticos em Node 22
+   via controle A/B, ou seja, não são regressão do bump. Candidatos a spec própria no `harness-dev`.
+7. **Gates de segurança finais reportam FAIL** mas ambos são explicáveis e não-bloqueantes: gitleaks
+   achou os próprios segredos em `.env` (gitignorado, nunca seria commitado) e trivy_config achou 1
+   HIGH pré-existente no Dockerfile do harness sandbox (fora do escopo desta spec).
+8. **Ferramentas ausentes nesta máquina** continuam gerando SKIPPED em vez de rodar de verdade:
+   tflint, kubeconform, pluto, terraform-docs, polaris, kube-linter, conftest, semgrep, syft,
+   grype, osv-scanner, infracost — gap antigo, já documentado em sessões anteriores, não é novo.
+9. **`aggregateWindow(createEmpty: true)`** (grow-cockpit, microgrow) não tem equivalente trivial
+   em SQL sem `generate_series` — traduzido sem zero-fill, gráfico de barras pode ter buracos onde
+   antes mostrava zero.
+
 ## D-2026-08-25-1: PM2 resurrect em vez de restart manual
 Contexto: PM2 daemon subiu frio (0 processos) após restart do WSL2, dump.pm2 disponível (2026-06-13).
 Decisão: usar `pm2 resurrect` (idempotente, reversível) em vez de recriar ecosystem manualmente.
@@ -388,3 +444,11 @@ Pendência registrada, não bloqueante: `gitleaks`/`shellcheck` instalados só n
 outra máquina/dev precisa instalar os dois binários (comandos no cabeçalho de
 `scripts/pre-commit.sh` e no header do Dockerfile.sandbox) antes do hook rodar essas duas checagens
 de verdade; até lá, SKIP com mensagem, nunca falso PASS.
+
+## D-2026-09-10-1: developerFolio permanece em `master` (decisão explícita do usuário)
+Usuário confirmou: `developerFolio` é fork público (não é dele), fica em `master` de propósito —
+convenção `main` (ADR-013) não se aplica a repos fork sem necessidade concreta. `tldr-projects`
+(dele, sem remote real) renomeado `master`→`main` na mesma sessão: branch órfã local de 1 commit
+("first commit", não relacionada) deletada + ref remota órfã limpa (`refs/remotes/origin/main`,
+resíduo de remote removido no passado) antes do rename, sem perda de working tree (mudanças não
+commitadas de outra frente preservadas). Sem remote real neste repo — nada pra dar push.

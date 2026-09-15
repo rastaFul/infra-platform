@@ -106,7 +106,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"procstat_cpu_usage\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"service\"] == \"api\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")"
+          "rawSql": "SELECT date_bin($__interval, time) AS time, AVG(counter) AS value\nFROM procstat_cpu_usage\nWHERE $__timeFilter(time) AND service = 'api'\nGROUP BY 1\nORDER BY 1",
+          "format": "time_series"
         }
       ]
     },
@@ -151,7 +152,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"procstat_memory_rss\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"service\"] == \"api\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")"
+          "rawSql": "SELECT date_bin($__interval, time) AS time, AVG(counter) AS value\nFROM procstat_memory_rss\nWHERE $__timeFilter(time) AND service = 'api'\nGROUP BY 1\nORDER BY 1",
+          "format": "time_series"
         }
       ]
     },
@@ -196,7 +198,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"procstat_cpu_usage\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"service\"] == \"web\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")"
+          "rawSql": "SELECT date_bin($__interval, time) AS time, AVG(counter) AS value\nFROM procstat_cpu_usage\nWHERE $__timeFilter(time) AND service = 'web'\nGROUP BY 1\nORDER BY 1",
+          "format": "time_series"
         }
       ]
     },
@@ -241,7 +244,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"procstat_memory_rss\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"service\"] == \"web\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"mean\")"
+          "rawSql": "SELECT date_bin($__interval, time) AS time, AVG(counter) AS value\nFROM procstat_memory_rss\nWHERE $__timeFilter(time) AND service = 'web'\nGROUP BY 1\nORDER BY 1",
+          "format": "time_series"
         }
       ]
     },
@@ -285,7 +289,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"filestat_size_bytes\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> last()\n  |> yield(name: \"last\")"
+          "rawSql": "SELECT time, counter AS value FROM filestat_size_bytes WHERE $__timeFilter(time) ORDER BY time DESC LIMIT 1",
+          "format": "table"
         }
       ]
     },
@@ -347,7 +352,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"cpu\")\n  |> filter(fn: (r) => r[\"_field\"] == \"usage_user\" or r[\"_field\"] == \"usage_system\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({ r with _value: r.usage_user + r.usage_system }))\n  |> last()\n  |> yield(name: \"last\")"
+          "rawSql": "SELECT time, usage_user + usage_system AS value\nFROM cpu\nWHERE $__timeFilter(time) AND cpu = 'cpu-total'\nORDER BY time DESC\nLIMIT 1",
+          "format": "table"
         }
       ]
     },
@@ -409,7 +415,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mem_used_percent\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> last()\n  |> yield(name: \"last\")"
+          "rawSql": "SELECT time, used_percent AS value FROM mem WHERE $__timeFilter(time) ORDER BY time DESC LIMIT 1",
+          "format": "table"
         }
       ]
     },
@@ -471,7 +478,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"disk_used_percent\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> last()\n  |> yield(name: \"last\")"
+          "rawSql": "SELECT time, used_percent AS value FROM disk WHERE $__timeFilter(time) AND path = '/' ORDER BY time DESC LIMIT 1",
+          "format": "table"
         }
       ]
     },
@@ -546,7 +554,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_response_result_code\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"probe\"] == \"api-local\")\n  |> last()\n  |> yield(name: \"last\")"
+          "rawSql": "SELECT time, result_code AS value FROM http_response WHERE $__timeFilter(time) AND probe = 'api-local' ORDER BY time DESC LIMIT 1",
+          "format": "table"
         }
       ]
     },
@@ -621,7 +630,8 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "query": "from(bucket: \"rastafinancas\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"http_response_result_code\")\n  |> filter(fn: (r) => r[\"_field\"] == \"counter\")\n  |> filter(fn: (r) => r[\"probe\"] == \"web-public\")\n  |> last()\n  |> yield(name: \"last\")"
+          "rawSql": "SELECT time, result_code AS value FROM http_response WHERE $__timeFilter(time) AND probe = 'web-public' ORDER BY time DESC LIMIT 1",
+          "format": "table"
         }
       ]
     }
