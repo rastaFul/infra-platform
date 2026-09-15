@@ -133,7 +133,18 @@ RUN curl -sSfL https://github.com/aquasecurity/kube-bench/releases/download/v${K
 # `terraform-docs` version corrected from the implementing sub-agent's
 # unverified guess (it had no network access to check; v0.19.0 was wrong,
 # real current release is v0.24.0 — verified here via redirect lookup).
-RUN curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+# SEVENTH BUG FOUND AND FIXED HERE (2026-09-15, live): upstream removed
+# `install_linux.sh` from the tflint repo entirely on 2026-09-12 — the old
+# `curl .../install_linux.sh | bash` pattern below 404s now (confirmed live,
+# not assumed). Switched to a direct release zip download, same pattern as
+# every other non-official-installer tool in this file. Version left
+# unpinned deliberately (`latest/download/`, not an api.github.com call, so
+# not exposed to the tfsec-style rate-limit fragility documented above).
+RUN curl -sSfLo /tmp/tflint.zip \
+    https://github.com/terraform-linters/tflint/releases/latest/download/tflint_linux_${TARGETARCH}.zip \
+    && unzip -q -o /tmp/tflint.zip -d /usr/local/bin tflint \
+    && chmod +x /usr/local/bin/tflint \
+    && rm /tmp/tflint.zip
 
 ARG TERRAFORM_DOCS_VERSION=0.24.0
 RUN curl -sSfLo /tmp/terraform-docs.tar.gz https://terraform-docs.io/dl/v${TERRAFORM_DOCS_VERSION}/terraform-docs-v${TERRAFORM_DOCS_VERSION}-linux-${TARGETARCH}.tar.gz \
@@ -275,5 +286,24 @@ ENV SONAR_HOST_URL=http://sonarqube:9000
 
 COPY scripts/sonar-scan.sh /usr/local/bin/sonar-scan
 RUN chmod +x /usr/local/bin/sonar-scan
+
+# Non-root user (2026-09-15, closes trivy_config DS-0002 HIGH: "Specify at
+# least 1 USER command... running as root can lead to container escape").
+# Reuses the `node` user this base image (node:20-alpine) already ships at
+# uid 1000/gid 1000 -- deliberately NOT a freshly created user, because
+# `sandbox-run.sh` bind-mounts the host project dir at /workspace
+# (`-v "$WORKSPACE:/workspace"`), and uid 1000 is the conventional first
+# regular Linux user (confirmed this matches the actual host user on
+# rastaFul dev machines) -- same class of bind-mount permission bug already
+# hit twice this session on unrelated services (Vault, InfluxDB 3), fixed
+# here proactively instead of reactively.
+# `helm plugin install` above ran as root during build, writing to
+# /root/.local/share/helm -- copied + rechowned to the node user's home so
+# `helm-unittest` still works after the USER switch below.
+RUN mkdir -p /home/node/.local/share \
+    && cp -r /root/.local/share/helm /home/node/.local/share/helm \
+    && chown -R node:node /home/node/.local /workspace
+ENV HOME=/home/node
+USER node
 
 ENTRYPOINT ["/bin/bash"]

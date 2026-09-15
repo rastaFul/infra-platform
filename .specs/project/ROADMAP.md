@@ -55,6 +55,37 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 - [ ] Validar `darwin.yml` no primeiro Mac real
 - Ver D-2026-08-27-21
 
+## Débito de teste achado pelo bump Node 22->24 (infra-full-upgrade-2026-09) — backlog do produto
+
+Achado durante o bump de runtime (harness-infra só troca imagem base + roda gate, não conserta
+código de app — ver `.specs/features/infra-full-upgrade-2026-09/spec.md` D4). Confirmado via
+controle A/B Node 22 vs Node 24 em todos os casos: **não é regressão do bump**, é débito
+pré-existente que só apareceu porque alguém finalmente rodou o teste de verdade sob gate.
+Candidatos a spec própria no `harness-dev` (avaliação de causa raiz e correção fica a critério de
+quem pegar a spec — não pré-julgado aqui):
+
+- [ ] `artists-booking/apps/api/Dockerfile.dev` não builda (`ERR_PNPM_IGNORED_BUILDS`) — usa
+  `npm install -g pnpm` (pega latest, hoje 10.x) em vez de pin via corepack como os outros 2
+  Dockerfiles do mesmo repo já fazem (ver D-2026-08-25-2)
+- [ ] `artists-booking` API: 7/277 testes flaky (`tests/health.test.ts`,
+  `tests/routes/auth.routes.test.ts`, `tests/routes/review.routes.test.ts`,
+  `tests/plugins/observability.plugin.test.ts`) — timeout de 5000ms, suspeita de I/O de bind-mount
+  em WSL2, não investigado a fundo
+- [ ] `rastafinancas` API: 2/171 testes falhando em `src/routes/oauth.test.ts` (timeout 5000ms,
+  `GET /api/auth/google/callback`) — não investigado a fundo, reproduzido de forma consistente
+  (3x) tanto em Node 22 quanto Node 24
+
+## Débito de segurança de dependências achado ao instalar trivy/osv-scanner de verdade (2026-09-15)
+
+Achado como efeito colateral de instalar as ferramentas de gate que faltavam nesta máquina
+(D-2026-09-15-2 item 8) — nunca tinham rodado de verdade localmente antes (só em CI, onde os
+lockfiles de cada repo de produto não são varridos por um scan de `infra-platform`). Rodando
+`skills/security-gates/scripts/run-security-gates.sh` contra `rastafinancas` pela primeira vez:
+**3 CRITICAL + 31 HIGH** (trivy_fs) e **6 CRITICAL + 36 HIGH** (osv-scanner) em dependências reais
+do `package-lock.json`. Não investigado a fundo (fora do escopo de infra-platform) — candidato a
+spec própria no `harness-dev` do rastafinancas pra triagem (quais são realmente exploráveis nesse
+contexto vs. falso-positivo de dependência transitiva não usada em runtime) e correção.
+
 ## Fase 2+ — AWS (`aws-prod`) — NOT STARTED
 
 Só quando houver receita/escala que justifique. Mesmas imagens, mesmo pipeline — troca de destino, não reescrita.

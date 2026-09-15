@@ -14,3 +14,4 @@ path "secret/metadata/artists/*" {
 path "secret/data/vetcare/*"       { capabilities = ["deny"] }
 path "secret/data/rastafinancas/*" { capabilities = ["deny"] }
 path "secret/data/microgrow/*"     { capabilities = ["deny"] }
+path "secret/data/platform/*" { capabilities = ["deny"] }

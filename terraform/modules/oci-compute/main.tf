@@ -1,6 +1,12 @@
 # main.tf — oci-compute module
 
 terraform {
+  # Added 2026-09-15 (tflint finding, terraform_required_version rule --
+  # tool ran for real for the first time this session, previously always
+  # SKIPPED locally for lack of the binary). Matches the constraint already
+  # declared in environments/oci-free/main.tf.
+  required_version = ">= 1.6"
+
   required_providers {
     oci = {
       source  = "oracle/oci"

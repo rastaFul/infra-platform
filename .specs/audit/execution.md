@@ -752,3 +752,62 @@ não assumido). Corrigido, `/health` das 2 datasources: `OK`. Query real via `/a
   itens. semgrep/syft+grype: SKIPPED (não instalados).
 - `skills/cost-gates/run-cost-gate.sh`: SKIPPED (infracost não instalado)
 - Status: COMPLETED (ver dúvidas finais registradas em DECISIONS.md pro usuário revisar)
+
+## infra-full-upgrade-2026-09-followups — T1/T2/T3 — 2026-09-15T20:45:00-03:00
+Spec `.specs/features/infra-full-upgrade-2026-09-followups/spec.md`, respostas do usuário às 9
+dúvidas de D-2026-09-15-2 (ver D-2026-09-15-3 em DECISIONS.md).
+
+**T1 — rasta-slo.json overrides**: `_value`/`_time` -> `value`/`time` nos 2 overrides do painel
+"Downtime Events" (`probe`->"Service" já estava certo). Grafana reiniciado, painel confirmado
+consistente com as colunas reais retornadas pela query SQL.
+
+**T2 — Vault tenant `platform`**: criada `platform/vault/policies/platform.hcl` (read-only
+`secret/data/platform/*`, deny cruzado nos 4 produtos + o inverso nos 4 policies existentes,
+mesmo padrão de defesa em profundidade). `platform` adicionado ao array `PROJECTS` de
+`scripts/vault-init.sh`, rodado (idempotente — 4 policies existentes re-aplicadas sem re-criar
+AppRole, `platform` criado do zero: policy + AppRole). `vault-push-env.sh platform platform/.env`
+rodado — 12 chaves reais confirmadas em `secret/data/platform/env` via `vault kv get` real
+(incluindo `INFLUXDB3_ADMIN_TOKEN`, `GRAFANA_ADMIN_PASSWORD`, `GLITCHTIP_SECRET_KEY`, etc.).
+
+**T3a — gitleaks working-tree false-positive**: `skills/security-gates/scripts/
+run-security-gates.sh` agora gera um allowlist temporário do gitleaks com os paths que o próprio
+git considera ignorados (`git ls-files --others --ignored --exclude-standard`) antes de rodar
+`gitleaks detect --no-git`, sem perder a varredura de tudo que É rastreável. Gate real:
+infra-platform `run-security-gates.sh` -> `overall: PASS` (era FAIL). Sincronizado em
+`agents-harness/claude/skills/security-gates/scripts/run-security-gates.sh` (canônico).
+
+**T3b — trivy_config HIGH em Dockerfile.sandbox**: `USER node` (uid 1000, já existe na imagem
+base `node:20-alpine`, casa com o uid convencional do host pro bind-mount do `sandbox-run.sh`) +
+cópia do plugin helm instalado como root pro home do `node`. Build real (`docker build`) PASS,
+smoke test como não-root confirmou terraform/trivy/tflint/kube-linter/helm-unittest/conftest
+funcionando. `trivy config` real: 0 misconfigurations (era 1 HIGH). Corrigido no canônico
+`agents-harness/docker/Dockerfile.sandbox`, sincronizado pra
+`infra-platform/.harness-sandbox/docker/Dockerfile.sandbox`.
+
+**Achado extra durante T3b (bug real, não relacionado ao pedido, corrigido de passagem)**:
+`terraform-linters/tflint` removeu `install_linux.sh` do repo em 2026-09-12 — quebrava tanto o
+`Dockerfile.sandbox` quanto o `install-gate-tools.sh` (item 8) com 404. Corrigido nos dois lugares
+(download direto do zip do release, mesmo padrão dos outros ~15 tools do Dockerfile).
+
+**Item 8 (tooling)**: `agents-harness/scripts/install-gate-tools.sh` criado (novo), instala
+tflint/terraform-docs/polaris/pluto/kubeconform/kube-linter/conftest/osv-scanner/syft/grype/
+infracost/semgrep direto no host (~/.local/bin, sem sudo), reaproveitando as versões/URLs já
+verificadas ao vivo no `Dockerfile.sandbox`. Ligado em `claude/install.sh` e `codex/install.sh`
+(roda automaticamente em toda instalação/atualização de agente). Rodado nesta máquina: 11/12 na
+primeira tentativa (tflint falhou por causa do mesmo bug do install_linux.sh, corrigido e
+re-testado com sucesso: `TFLint version 0.64.0`).
+**Achado real adicional, corrigido**: `osv-scanner` v2.x mudou de CLI flat (`--json -r .`) pra
+subcomando (`scan source -r --format json .`) — achado só depois de instalar de verdade e rodar
+`run-security-gates.sh` (antes era SKIPPED, nunca exercitado). Corrigido no script (canônico +
+cópia). Rodar contra `rastafinancas` revelou débito de segurança REAL de produto nunca visto antes
+(3 CRITICAL + 31 HIGH via trivy_fs, 6 CRITICAL + 36 HIGH via osv-scanner) — fora do escopo desta
+spec (é infra-platform, não rastafinancas), registrado como achado pra decisão futura do usuário.
+
+**Item 9 (zero-fill)**: solução simples encontrada e aplicada — `date_bin_gapfill()` (função
+nativa do InfluxDB 3 Core/DataFusion) + `COALESCE(count(...), 0)` no lugar de `date_bin()` simples.
+Testado contra dado real (`api_metrics`, 24 buckets horários, zero-fill correto nas horas sem
+dado) antes de aplicar no painel real (`pump_events` ainda sem dado — simulador pausado, ver
+achado do item 2 — mas a query já está correta e vai zero-preencher assim que houver dado).
+Arquivo: `platform/dashboards/microgrow/grow-cockpit.json`.
+
+Status: DONE (T1/T2/T3 + itens 8/9 desta rodada de follow-ups)

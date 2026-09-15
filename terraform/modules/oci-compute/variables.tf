@@ -8,11 +8,6 @@ variable "compartment_id" {
   type        = string
 }
 
-variable "region" {
-  description = "OCI region — prefer non-US for Always-Free ARM shape availability (Frankfurt/Singapore/Tokyo provision reliably; US regions frequently report 'Out of host capacity'). See ADR 007."
-  type        = string
-}
-
 variable "availability_domain" {
   description = "Availability domain within the region (e.g. 'AbCd:EU-FRANKFURT-1-AD-1') — look up via `oci iam availability-domain list`"
   type        = string

@@ -1,5 +1,64 @@
 # DECISIONS
 
+## D-2026-09-15-3: respostas às 9 dúvidas de D-2026-09-15-2
+Usuário revisou e decidiu, item a item:
+1. InfluxDB 2.7 antigo: sem decisão explícita ainda, continua rodando como rollback.
+2. Varredura das métricas/medições inexistentes: pedida, ver resultado logo abaixo desta entrada.
+3. `rasta-slo.json` (colunas Flux órfãs): aprovado criar spec + corrigir.
+4. Token InfluxDB 3 sem Vault: aprovado criar spec + corrigir.
+5. `evolution-api` travado em v2.3.7 (não v2.4.0, que exige ativação de licença paga/online):
+   **confirmado correto** — usuário não quer custo novo. Fica definitivo, não é mais "pendência".
+6. Débito de teste do bump Node: registrado no `ROADMAP.md` (seção própria) pro `harness-dev`
+   avaliar causa raiz e decidir correção quando pegar a spec — não meu trabalho pré-julgar aqui.
+7. Gates de segurança finais (gitleaks working-tree + trivy_config no Dockerfile.sandbox): aprovado
+   criar spec + corrigir os dois.
+8. Ferramentas de gate ausentes (tflint, kubeconform, pluto, terraform-docs, polaris, kube-linter,
+   conftest, semgrep, syft, grype, osv-scanner, infracost): instalar AGORA nesta máquina E
+   adicionar ao repo `agents-harness` pra instalar automaticamente em qualquer setup/atualização
+   futura de agente.
+9. `aggregateWindow(createEmpty: true)` sem zero-fill no SQL: aplicar solução simples se existir,
+   senão registrar como gap aceito conscientemente.
+
+### Varredura real (item 2) — resultado
+Investigação feita lendo código de produto + logs/MQTT ao vivo (não suposição). Achados divididos
+em 4 categorias:
+
+**rastafinancas (13 medições/campos sem dado)**:
+- **Categoria B — nome errado no dashboard (bug real, corrigido na spec `infra-full-upgrade-2026-09-followups`)**:
+  `rasta_auth_logins_total`→real é `rasta_user_logins_total`; `rasta_auth_token_refreshes_total`→
+  real é `rasta_token_refresh_total`; `rasta_auth_password_resets_total`→real é
+  `rasta_password_reset_total`; `rasta_import_batches_total`→real é `rasta_import_batch_total`
+  (confirmado lendo `apps/api/src/plugins/product-metrics.ts`).
+- **Categoria C — métrica não existe como contador próprio (corrigido na mesma spec)**:
+  `rasta_import_errors_total` não existe — erro de import é um LABEL (`status="error"`) do
+  contador `rasta_import_batch_total`, não uma métrica separada (confirmado em
+  `apps/api/src/routes/extrato.ts:165`, `importBatchTotal.labels('ofx', 'error')`).
+- **Categoria A — nome certo, código certo, zero evento ainda (não é bug, vai aparecer com uso
+  real)**: `rasta_rate_limit_hits_total`, `rasta_user_signups_total`, `rasta_data_ops_total`,
+  `rasta_notification_job_runs_total`, `rasta_notifications_sent_total` — todos existem
+  exatamente com esse nome no código, só nunca foram incrementados neste ambiente (ninguém se
+  cadastrou, nenhum rate limit bateu, etc.). Nada a corrigir.
+- **Categoria D — Telegraf nunca configurado pra essas fontes (gap de infra pré-existente, não
+  desta sessão, não corrigido)**: `procstat_cpu_usage`, `procstat_memory_rss`,
+  `filestat_size_bytes` — `rastafinancas/infrastructure/observability/telegraf/telegraf.conf` não
+  tem nenhum `inputs.procstat`/`inputs.filestat` configurado. Painel foi provavelmente copiado de
+  um template genérico sem adaptar pra esse produto.
+
+**microgrow (7 medições sem dado, todas Categoria A)**: `air_conditions`, `soil_moisture`,
+`light_data`, `reservoir`, `hydric_score`, `pump_events` batem exatamente com os `name_override`
+reais do `telegraf.conf` — confirmado ao vivo que o simulador está gerando leituras internamente
+(`docker logs microgrow-simulator` mostrando VWC/Temp/Umid) mas `sim_running: 0` no payload MQTT
+real de `microgrow/metrics/api` (`sensor_age_*_s: -1` em todos os sensores, `mqtt_messages_
+processed: 0`) — o simulador está PAUSADO, não publica nos tópicos MQTT dos sensores agora.
+Pré-existente, não relacionado a esta migração. **`process_metrics` é caso à parte**: os 2 blocos
+`inputs.procstat` no `telegraf.conf` do microgrow têm o comentário `# Process metrics (PM2)` —
+resíduo morto da era PM2 (migração PM2→Docker concluída 2026-08-29, ver ROADMAP Batch 3). O
+container do Telegraf não compartilha PID namespace com nenhum outro container (`pid: host` nunca
+configurado) — `pattern = "microgrow"`/`exe = "daemon.py"` nunca vão casar com processo nenhum de
+dentro do namespace isolado do Telegraf. Config morta desde a migração, nunca limpa. Registrado
+como achado, não corrigido nesta rodada (fora do pedido explícito, é limpeza de config órfã do
+microgrow — se quiser que eu remova os 2 blocos `inputs.procstat` mortos, confirme).
+
 ## D-2026-09-15-1: `infra-full-upgrade-2026-09` APROVADA — D1-D6 + escopo ampliado (todos LTS, mesmo com migração)
 Usuário aprovou a spec inteira numa sessão só, downtime aceito. Respostas:
 - D1 GlitchTip: hop duplo 4.2.4→5.x→6.x agora (não parar em 5.x).

@@ -12,7 +12,10 @@ set -euo pipefail
 VAULT_ADDR="${VAULT_ADDR:-http://127.0.0.1:8200}"
 VAULT_CONTAINER="${VAULT_CONTAINER:-platform-vault}"
 VAULT_INIT_FILE="${HOME}/.vault-init-local"
-PROJECTS=(vetcare rastafinancas microgrow artists)
+# "platform" added 2026-09-15 (infra-full-upgrade-2026-09-followups T2) --
+# not a product, the shared observability/secrets stack itself. Same
+# apply_policy/create_approle treatment as the 4 real tenants.
+PROJECTS=(vetcare rastafinancas microgrow artists platform)
 
 export VAULT_ADDR
 

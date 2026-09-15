@@ -36,7 +36,6 @@ module "compute" {
   source = "../../modules/oci-compute"
 
   compartment_id      = var.compartment_id
-  region              = var.region
   availability_domain = var.availability_domain
   ssh_public_key      = var.ssh_public_key
   operator_cidr       = var.operator_cidr
@@ -48,7 +47,8 @@ variable "compartment_id" {
   type = string
 }
 variable "region" {
-  type = string
+  description = "OCI region — prefer non-US for Always-Free ARM shape availability (Frankfurt/Singapore/Tokyo provision reliably; US regions frequently report 'Out of host capacity'). See ADR 007. (Moved here 2026-09-15 from modules/oci-compute/variables.tf: tflint's terraform_unused_declarations flagged it there for real the first time this session -- the module never referenced var.region, only the provider block here does.)"
+  type        = string
 }
 variable "availability_domain" {
   type = string

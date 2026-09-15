@@ -58,7 +58,7 @@
       }
     ]
   },
-  "description": "SLO tracking, uptime percentages, response times, and downtime events for RastaFinan\u00e7as (30-day window)",
+  "description": "SLO tracking, uptime percentages, response times, and downtime events for RastaFinanças (30-day window)",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -490,7 +490,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "_value"
+              "options": "value"
             },
             "properties": [
               {
@@ -502,7 +502,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "_time"
+              "options": "time"
             },
             "properties": [
               {
@@ -539,7 +539,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "RastaFinan\u00e7as \u2014 SLO / Uptime",
+  "title": "RastaFinanças — SLO / Uptime",
   "uid": "rasta-slo",
   "version": 1
 }

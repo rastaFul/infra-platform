@@ -40,13 +40,31 @@ fi
 RESULT=$(echo "$RESULT" | python3 -c "import sys,json;d=json.load(sys.stdin);d['gates']['tflint']={'status':'$TFLINT_STATUS','errors':$TFLINT_ERRORS,'warnings':$TFLINT_WARNINGS,'note':'$TFLINT_NOTE'};print(json.dumps(d))")
 
 # --- kubeconform: validate K8s manifests against real API schemas ---
-K8S_FILES=$(find . -maxdepth 6 \( -name "*.yaml" -o -name "*.yml" \) -not -path "*/.terraform/*" -not -path "*/node_modules/*" -not -path "*/templates/*" 2>/dev/null | head -1)
+# Real bug found 2026-09-15 (D-2026-09-15-2/3, item 8): once kubeconform
+# actually got installed (previously SKIPPED locally for lack of the
+# binary), this glob-every-yaml approach fed it docker-compose.yml,
+# GitHub Actions workflows, Grafana/Prometheus/Loki configs, etc. -- every
+# single one failed with "missing 'kind' key", a 100% false-positive FAIL
+# on a repo (infra-platform) that has zero actual Kubernetes manifests
+# (see ADR-001: K8s not adopted yet). Fixed by pre-filtering to files that
+# actually look like k8s manifests (grep both `apiVersion:` and `kind:` --
+# a cheap heuristic, but every real manifest has both and no non-k8s YAML
+# in this repo happens to have both together).
+find_k8s_manifest_candidates() {
+  # `|| true` on each stage: grep -l legitimately exits 1 when nothing
+  # matches (e.g. a repo with zero k8s manifests, like this one today) --
+  # under `set -euo pipefail` that would otherwise abort the whole script.
+  find . -maxdepth 6 \( -name "*.yaml" -o -name "*.yml" \) -not -path "*/.terraform/*" -not -path "*/node_modules/*" -not -path "*/templates/*" 2>/dev/null \
+    | { xargs -r grep -lE '^apiVersion:' 2>/dev/null || true; } \
+    | { xargs -r grep -lE '^kind:' 2>/dev/null || true; }
+}
+K8S_FILES=$(find_k8s_manifest_candidates | head -1)
 if [ -z "$K8S_FILES" ]; then
   KCF_STATUS="SKIPPED"; KCF_VALID=0; KCF_INVALID=0; KCF_ERRORS=0; KCF_NOTE="no plain k8s manifest yaml/yml found (raw Helm templates excluded, see script header)"
 elif ! command -v kubeconform &>/dev/null; then
   KCF_STATUS="SKIPPED"; KCF_VALID=0; KCF_INVALID=0; KCF_ERRORS=0; KCF_NOTE="kubeconform not installed"
 else
-  KCF_OUT=$(find . -maxdepth 6 \( -name "*.yaml" -o -name "*.yml" \) -not -path "*/.terraform/*" -not -path "*/node_modules/*" -not -path "*/templates/*" 2>/dev/null | xargs kubeconform -summary -output json -ignore-missing-schemas 2>&1) && KCF_STATUS="PASS" || KCF_STATUS="FAIL"
+  KCF_OUT=$(find_k8s_manifest_candidates | xargs kubeconform -summary -output json -ignore-missing-schemas 2>&1) && KCF_STATUS="PASS" || KCF_STATUS="FAIL"
   KCF_VALID=$(echo "$KCF_OUT" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('summary',{}).get('valid',0))" 2>/dev/null || echo 0)
   KCF_INVALID=$(echo "$KCF_OUT" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('summary',{}).get('invalid',0))" 2>/dev/null || echo 0)
   KCF_ERRORS=$(echo "$KCF_OUT" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('summary',{}).get('errors',0))" 2>/dev/null || echo 0)

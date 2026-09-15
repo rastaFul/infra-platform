@@ -7,25 +7,48 @@
   "schemaVersion": 38,
   "version": 1,
   "refresh": "10s",
-  "time": { "from": "now-6h", "to": "now" },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "timepicker": {},
-  "tags": ["microgrow", "cockpit"],
+  "tags": [
+    "microgrow",
+    "cockpit"
+  ],
   "panels": [
     {
       "id": 1,
       "title": "Row: Estado Atual",
       "type": "row",
       "collapsed": false,
-      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 }
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      }
     },
     {
       "id": 2,
       "title": "Hydric Score",
       "type": "gauge",
-      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-      "gridPos": { "x": 0, "y": 1, "w": 4, "h": 6 },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-microgrow"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 4,
+        "h": 6
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "orientation": "auto",
         "showThresholdLabels": false,
         "showThresholdMarkers": true,
@@ -40,10 +63,22 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 50 },
-              { "color": "orange", "value": 70 },
-              { "color": "red", "value": 85 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
             ]
           }
         },
@@ -52,7 +87,10 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-microgrow"
+          },
           "rawSql": "SELECT score FROM hydric_score WHERE time >= now() - INTERVAL '5 minutes' ORDER BY time DESC LIMIT 1",
           "format": "table"
         }
@@ -62,10 +100,22 @@
       "id": 3,
       "title": "Decisão Atual",
       "type": "stat",
-      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-      "gridPos": { "x": 4, "y": 1, "w": 4, "h": 6 },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-microgrow"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 1,
+        "w": 4,
+        "h": 6
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "orientation": "auto",
         "textMode": "auto",
         "colorMode": "background",
@@ -77,16 +127,28 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "blue", "value": null }
+              {
+                "color": "blue",
+                "value": null
+              }
             ]
           },
           "mappings": [
             {
               "type": "value",
               "options": {
-                "HOLD":      { "color": "blue",  "index": 0 },
-                "IRRIGATE":  { "color": "green", "index": 1 },
-                "BLOCKED":   { "color": "red",   "index": 2 }
+                "HOLD": {
+                  "color": "blue",
+                  "index": 0
+                },
+                "IRRIGATE": {
+                  "color": "green",
+                  "index": 1
+                },
+                "BLOCKED": {
+                  "color": "red",
+                  "index": 2
+                }
               }
             }
           ]
@@ -96,7 +158,10 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-microgrow"
+          },
           "rawSql": "SELECT decision FROM hydric_score WHERE time >= now() - INTERVAL '5 minutes' ORDER BY time DESC LIMIT 1",
           "format": "table"
         }
@@ -106,10 +171,22 @@
       "id": 4,
       "title": "VWC Médio %",
       "type": "gauge",
-      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-      "gridPos": { "x": 8, "y": 1, "w": 4, "h": 6 },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-microgrow"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 1,
+        "w": 4,
+        "h": 6
+      },
       "options": {
-        "reduceOptions": { "calcs": ["mean"] },
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ]
+        },
         "orientation": "auto",
         "showThresholdLabels": false,
         "showThresholdMarkers": true
@@ -122,10 +199,22 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red",    "value": null },
-              { "color": "yellow", "value": 20 },
-              { "color": "yellow", "value": 40 },
-              { "color": "green",  "value": 60 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 20
+              },
+              {
+                "color": "yellow",
+                "value": 40
+              },
+              {
+                "color": "green",
+                "value": 60
+              }
             ]
           }
         },
@@ -134,7 +223,10 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-microgrow"
+          },
           "rawSql": "SELECT avg(vwc_pct) as vwc_pct FROM soil_moisture WHERE time >= now() - INTERVAL '2 minutes'",
           "format": "table"
         }
@@ -144,10 +236,22 @@
       "id": 5,
       "title": "Reservatório %",
       "type": "stat",
-      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-      "gridPos": { "x": 12, "y": 1, "w": 4, "h": 6 },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-microgrow"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 6
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "orientation": "auto",
         "textMode": "auto",
         "colorMode": "background",
@@ -159,10 +263,22 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red",    "value": null },
-              { "color": "yellow", "value": 10 },
-              { "color": "yellow", "value": 25 },
-              { "color": "green",  "value": 100 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 10
+              },
+              {
+                "color": "yellow",
+                "value": 25
+              },
+              {
+                "color": "green",
+                "value": 100
+              }
             ]
           }
         },
@@ -171,7 +287,10 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-microgrow"
+          },
           "rawSql": "SELECT level_pct FROM reservoir WHERE time >= now() - INTERVAL '2 minutes' ORDER BY time DESC LIMIT 1",
           "format": "table"
         }
@@ -181,10 +300,22 @@
       "id": 6,
       "title": "Próxima Rega (h)",
       "type": "stat",
-      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-      "gridPos": { "x": 16, "y": 1, "w": 4, "h": 6 },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-microgrow"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 4,
+        "h": 6
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "orientation": "auto",
         "textMode": "auto",
         "colorMode": "value",
@@ -196,7 +327,10 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null }
+              {
+                "color": "green",
+                "value": null
+              }
             ]
           }
         },
@@ -205,7 +339,10 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-microgrow"
+          },
           "rawSql": "SELECT next_irrigation_est_h FROM hydric_score WHERE time >= now() - INTERVAL '2 minutes' ORDER BY time DESC LIMIT 1",
           "format": "table"
         }
@@ -215,10 +352,22 @@
       "id": 7,
       "title": "Velocidade Simulação",
       "type": "stat",
-      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-      "gridPos": { "x": 20, "y": 1, "w": 4, "h": 6 },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-microgrow"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 6
+      },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
         "orientation": "auto",
         "textMode": "auto",
         "colorMode": "value",
@@ -231,7 +380,10 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "blue", "value": null }
+              {
+                "color": "blue",
+                "value": null
+              }
             ]
           },
           "mappings": [],
@@ -244,7 +396,10 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-microgrow"
+          },
           "rawSql": "SELECT sim_speed FROM api_metrics WHERE time >= now() - INTERVAL '2 minutes' ORDER BY time DESC LIMIT 1",
           "format": "table"
         }
@@ -255,17 +410,36 @@
       "title": "Row: Sensores — Últimas 6h",
       "type": "row",
       "collapsed": false,
-      "gridPos": { "x": 0, "y": 7, "w": 24, "h": 1 }
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 24,
+        "h": 1
+      }
     },
     {
       "id": 11,
       "title": "VWC Sensores de Solo",
       "type": "timeseries",
-      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-microgrow"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
       "options": {
-        "tooltip": { "mode": "multi", "sort": "none" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -275,13 +449,21 @@
           "custom": {
             "lineWidth": 2,
             "fillOpacity": 10,
-            "thresholdsStyle": { "mode": "line" }
+            "thresholdsStyle": {
+              "mode": "line"
+            }
           },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "transparent", "value": null },
-              { "color": "orange", "value": 40 }
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 40
+              }
             ]
           }
         },
@@ -290,7 +472,10 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-microgrow"
+          },
           "rawSql": "SELECT $__dateBin(time) as time, position, avg(vwc_pct) as vwc_pct FROM soil_moisture WHERE $__timeFilter(time) GROUP BY 1, position ORDER BY 1",
           "format": "time_series"
         }
@@ -300,11 +485,25 @@
       "id": 12,
       "title": "Hydric Score + Componentes",
       "type": "timeseries",
-      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-microgrow"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
       "options": {
-        "tooltip": { "mode": "multi", "sort": "none" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -318,10 +517,19 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "score" },
+            "matcher": {
+              "id": "byName",
+              "options": "score"
+            },
             "properties": [
-              { "id": "custom.lineWidth", "value": 3 },
-              { "id": "custom.fillOpacity", "value": 0 }
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
             ]
           }
         ]
@@ -329,7 +537,10 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-microgrow"
+          },
           "rawSql": "SELECT time, score, components_moisture, components_drying, components_time, components_temp FROM (SELECT time, score, components_moisture, components_drying, components_time, components_temp, ROW_NUMBER() OVER (PARTITION BY $__dateBin(time) ORDER BY time DESC) as rn FROM hydric_score WHERE $__timeFilter(time)) t WHERE rn = 1 ORDER BY time",
           "format": "time_series"
         }
@@ -339,11 +550,25 @@
       "id": 13,
       "title": "Temperatura + VPD (Canopy)",
       "type": "timeseries",
-      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-microgrow"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
       "options": {
-        "tooltip": { "mode": "multi", "sort": "none" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -354,15 +579,27 @@
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "temp_c" },
+            "matcher": {
+              "id": "byName",
+              "options": "temp_c"
+            },
             "properties": [
-              { "id": "unit", "value": "celsius" }
+              {
+                "id": "unit",
+                "value": "celsius"
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "vpd_kpa" },
+            "matcher": {
+              "id": "byName",
+              "options": "vpd_kpa"
+            },
             "properties": [
-              { "id": "unit", "value": "pressurekpa" }
+              {
+                "id": "unit",
+                "value": "pressurekpa"
+              }
             ]
           }
         ]
@@ -370,7 +607,10 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-microgrow"
+          },
           "rawSql": "SELECT $__dateBin(time) as time, avg(temp_c) as temp_c, avg(vpd_kpa) as vpd_kpa FROM air_conditions WHERE position = 'canopy' AND $__timeFilter(time) GROUP BY 1 ORDER BY 1",
           "format": "time_series"
         }
@@ -380,11 +620,25 @@
       "id": 14,
       "title": "Nível Reservatório",
       "type": "timeseries",
-      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-microgrow"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
       "options": {
-        "tooltip": { "mode": "single", "sort": "none" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -398,9 +652,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green",  "value": null },
-              { "color": "yellow", "value": 25 },
-              { "color": "red",    "value": 10 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 25
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
             ]
           }
         },
@@ -409,7 +672,10 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-microgrow"
+          },
           "rawSql": "SELECT time, level_pct FROM (SELECT time, level_pct, ROW_NUMBER() OVER (PARTITION BY $__dateBin(time) ORDER BY time DESC) as rn FROM reservoir WHERE $__timeFilter(time)) t WHERE rn = 1 ORDER BY time",
           "format": "time_series"
         }
@@ -420,16 +686,33 @@
       "title": "Row: Irrigação",
       "type": "row",
       "collapsed": false,
-      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 1 }
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 1
+      }
     },
     {
       "id": 21,
       "title": "Irrigações Hoje",
       "type": "stat",
-      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-      "gridPos": { "x": 0, "y": 25, "w": 4, "h": 4 },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-microgrow"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 4,
+        "h": 4
+      },
       "options": {
-        "reduceOptions": { "calcs": ["sum"] },
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ]
+        },
         "orientation": "auto",
         "textMode": "auto",
         "colorMode": "value",
@@ -441,9 +724,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 5 },
-              { "color": "red",    "value": 10 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
             ]
           }
         },
@@ -452,7 +744,10 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-microgrow"
+          },
           "rawSql": "SELECT count(*) as active FROM pump_events WHERE active = true AND time >= now() - INTERVAL '24 hours'",
           "format": "table"
         }
@@ -462,11 +757,25 @@
       "id": 22,
       "title": "Eventos de Irrigação (24h)",
       "type": "timeseries",
-      "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-      "gridPos": { "x": 4, "y": 25, "w": 20, "h": 8 },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "influxdb-microgrow"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 25,
+        "w": 20,
+        "h": 8
+      },
       "options": {
-        "tooltip": { "mode": "single", "sort": "none" },
-        "legend": { "displayMode": "list", "placement": "bottom" }
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
       },
       "fieldConfig": {
         "defaults": {
@@ -482,8 +791,11 @@
       "targets": [
         {
           "refId": "A",
-          "datasource": { "type": "influxdb", "uid": "influxdb-microgrow" },
-          "rawSql": "SELECT date_bin(INTERVAL '1 hour', time) as time, count(active) as active FROM pump_events WHERE time >= now() - INTERVAL '24 hours' GROUP BY 1 ORDER BY 1",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "influxdb-microgrow"
+          },
+          "rawSql": "SELECT date_bin_gapfill(INTERVAL '1 hour', time) as time, COALESCE(count(active), 0) as active\nFROM pump_events\nWHERE time >= now() - INTERVAL '24 hours' AND time <= now()\nGROUP BY 1\nORDER BY 1",
           "format": "time_series"
         }
       ]

@@ -10,9 +10,39 @@ RESULT='{"timestamp":"'$(date -Iseconds)'","gates":{},"overall":"PASS"}'
 # ---- gitleaks (secret scanning) ----
 if command -v gitleaks &>/dev/null; then
   GITLEAKS_REPORT=$(mktemp)
-  gitleaks detect --source . --no-git --redact \
+  # `--no-git` does a raw filesystem walk, which does NOT respect
+  # .gitignore -- real false-positive found 2026-09-15 (D-2026-09-15-2/3):
+  # this flagged real secrets sitting in .env files that are gitignored and
+  # would never actually be committed (CI never sees this because .env
+  # doesn't exist in a fresh checkout there). Fix: if this is a git repo,
+  # build a temporary gitleaks config that allowlists exactly the paths git
+  # itself considers ignored (`git ls-files --others --ignored
+  # --exclude-standard`) -- anything genuinely staged/tracked still gets
+  # scanned normally, only intentionally-gitignored files are excluded.
+  # Falls back to the old unrestricted scan if this isn't a git repo.
+  GITLEAKS_CONFIG_ARGS=()
+  if git rev-parse --is-inside-work-tree &>/dev/null; then
+    IGNORED_PATHS=$(git ls-files --others --ignored --exclude-standard)
+    if [ -n "$IGNORED_PATHS" ]; then
+      GITLEAKS_TMP_CONFIG=$(mktemp --suffix=.toml)
+      {
+        echo '[extend]'
+        echo 'useDefault = true'
+        echo ''
+        echo '[allowlist]'
+        echo 'paths = ['
+        while IFS= read -r p; do
+          [ -n "$p" ] && printf "  '''%s''',\n" "$p"
+        done <<< "$IGNORED_PATHS"
+        echo ']'
+      } > "$GITLEAKS_TMP_CONFIG"
+      GITLEAKS_CONFIG_ARGS=(--config "$GITLEAKS_TMP_CONFIG")
+    fi
+  fi
+  gitleaks detect --source . --no-git --redact "${GITLEAKS_CONFIG_ARGS[@]}" \
     --report-format json --report-path "$GITLEAKS_REPORT" \
     --exit-code 0 >/dev/null 2>&1 || true
+  [ -n "${GITLEAKS_TMP_CONFIG:-}" ] && rm -f "$GITLEAKS_TMP_CONFIG"
   GITLEAKS_GATE=$(python3 -c "
 import json
 try:
@@ -71,11 +101,28 @@ print(json.dumps(d))
 
 # ---- osv-scanner (multi-ecosystem SCA) ----
 if command -v osv-scanner &>/dev/null; then
-  OSV_OUT=$(osv-scanner --json -r . 2>/dev/null) || true
+  # v2.x CLI is subcommand-based (`scan source`, `--format json` not
+  # `--json`) -- real bug found 2026-09-15 when this tool went from
+  # SKIPPED (not installed) to actually installed for the first time
+  # (D-2026-09-15-2/3, item 8): the old flat `--json -r .` flags don't
+  # exist anymore, silently produced no output. Also: when a directory has
+  # no scannable lockfile at all (e.g. this repo, infra-platform, no
+  # package.json), osv-scanner exits non-zero (128) and prints NO json at
+  # all -- that's a legitimate "nothing to scan" PASS, not an error; only
+  # actually-empty/unparseable output on a directory that DOES have
+  # lockfiles would be a real ERROR, and there's no cheap way to
+  # distinguish those two cases from here, so empty output is always
+  # treated as 0 findings (never a false FAIL, worst case a false PASS
+  # that trivy_fs's own dependency scanning partially backstops).
+  OSV_OUT=$(osv-scanner scan source -r --format json . 2>/dev/null) || true
   OSV_GATE=$(echo "$OSV_OUT" | python3 -c "
 import sys, json
+raw = sys.stdin.read().strip()
+if not raw:
+    print(json.dumps({'status': 'PASS', 'critical': 0, 'high': 0, 'unscored': 0, 'note': 'no output (no scannable lockfile found, or nothing to report)'}))
+    sys.exit()
 try:
-    d = json.load(sys.stdin)
+    d = json.loads(raw)
 except Exception as e:
     print(json.dumps({'status': 'ERROR', 'critical': 0, 'high': 0, 'unscored': 0, 'error': str(e)}))
     sys.exit()
