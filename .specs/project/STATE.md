@@ -1,8 +1,25 @@
 # STATE
 
-## Session: infra-full-upgrade-2026-09
+## Session: infra-full-upgrade-2026-09-followups
 ## Status: COMPLETED
 ## Last updated: 2026-09-15
+
+## Sessão 2026-09-15 (continuação) — followups de D-2026-09-15-2 DONE
+Usuário respondeu as 9 dúvidas (D-2026-09-15-3). Spec `infra-full-upgrade-2026-09-followups`
+criada e concluída: T1 (rasta-slo.json overrides), T2 (tenant `platform` no Vault: policy+AppRole+
+push de 12 chaves), T3 (gitleaks working-tree false-positive + trivy_config HIGH no
+Dockerfile.sandbox, ambos corrigidos e sincronizados em `agents-harness`). Item 8 (tooling):
+`agents-harness/scripts/install-gate-tools.sh` criado e ligado nos 2 installers, 11/12 ferramentas
+instaladas nesta máquina (achado real: tflint install_linux.sh removido upstream 2026-09-12,
+corrigido). Item 9 (zero-fill): `date_bin_gapfill` + `COALESCE` aplicado e testado contra dado
+real. Efeito colateral de instalar as ferramentas de verdade: 3 bugs reais a mais achados e
+corrigidos nos próprios scripts de gate (`osv-scanner` mudou de CLI, `kubeconform` rodando contra
+YAML não-k8s, 2 findings reais do `tflint` no módulo Terraform) + débito de segurança REAL de
+dependências do rastafinancas nunca visto antes (registrado no ROADMAP, não corrigido, fora de
+escopo). Ambos os repos (`infra-platform` `b821cab`, `agents-harness` `4c84b8a`) commitados e
+pushed. Nada mais pendente desta rodada.
+
+## Sessão 2026-09-15 — infra-full-upgrade-2026-09 (original) — COMPLETED
 
 ## Sessão 2026-09-15 — infra-full-upgrade-2026-09 APPROVED, execução iniciada
 Spec aprovada (D-2026-09-15-1). Downtime aceito, sessão única, todos os 19 itens do inventário
