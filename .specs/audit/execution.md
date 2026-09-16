@@ -894,3 +894,13 @@ versão LTS mais atual. Feito no `dev-environment` (commit `e6d137d`, pushed):
   drift idêntico ao de antes).
 Status: DONE — item 7 do ROADMAP fechado por completo (desbloqueio + 29 achados + depreciação +
 padronização de versão).
+
+## Delegação de débito de produto ao harness-dev (prompts prontos, não disparados) — 2026-09-16T00:45:00-03:00
+Usuário pediu prompts separados por projeto (artists-booking, rastafinancas, vetcare) pra colar em
+sessões `harness-dev` dedicadas, cobrindo todo o débito de produto acumulado nesta spec de infra
+(Node bump, dependências, testes flaky, spec de /metrics do vetcare não confirmada). 3 prompts
+entregues na conversa (auto-contidos, sem depender de memória desta sessão, já que harness-dev
+começa frio em cada projeto). Registrado em D-2026-09-16-1 (DECISIONS.md) + ROADMAP.md marcado com
+o status "prompt pronto, não disparado" nos 3 blocos correspondentes. Nenhuma ação de código
+executada — é só preparação de handoff, execução fica a critério do usuário.
+Status: DONE (preparação) — execução real depende do usuário disparar os prompts.

@@ -26,7 +26,7 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 - [x] Per-project `docker-compose.yml` com redes isoladas — **já estava adequado**, verificado 2026-08-28: `artists_net` explícita, `microgrow` tem a sua, rastafinancas não precisa (SQLite, sem serviço extra), vetcare usa rede default do Compose (isolada na prática, só não segue a convenção de nome explícito `<project>_net` — achado LOW, cosmético)
 - [x] GitHub Actions CI (reusable workflow, 4 repos) — feito 2026-08-28 (`security-hardening-phase1`, Task 3)
 - [ ] Coolify CD (só em merge `main`, só quando `oci-free` existir) — bloqueado até Oracle
-- [x] Grafana dashboards golden signals — **achado 2026-08-28**: `golden-signals.json` (criado no Batch 1, órfão até o Prometheus existir) já cobre artists-booking e rastafinancas via variável `$service`, confirmado com dado real fluindo. microgrow já tinha os próprios. **vetcare é o único sem `/metrics`** — spec delegada pro harness-dev (`vetcare/.specs/features/observability-metrics/spec.md`)
+- [x] Grafana dashboards golden signals — **achado 2026-08-28**: `golden-signals.json` (criado no Batch 1, órfão até o Prometheus existir) já cobre artists-booking e rastafinancas via variável `$service`, confirmado com dado real fluindo. microgrow já tinha os próprios. **vetcare é o único sem `/metrics`** — spec delegada pro harness-dev (`vetcare/.specs/features/observability-metrics/spec.md`). Status de execução não confirmado nesta sessão — prompt de verificação/delegação pronto (D-2026-09-16-1), não disparado
 - Ver ADR 006, 009
 
 ## Batch 3 — Vault real + migração completa — quase tudo DONE
@@ -42,7 +42,7 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 - [x] `features/security-audit-auth-session/spec.md` — investigação concluída. rastafinancas: maduro (rate limit por rota, secure condicional, bcrypt 12). artists-booking: 2 gaps (sem rate limit em auth — HIGH; cookie sem `secure` — MEDIUM; bcrypt 10 — LOW). microgrow/vetcare: sem superfície de auth custom relevante.
 - [x] Achados delegados pro `harness-dev`: spec `artists-booking/.specs/features/21-security-hardening/spec.md` (APPROVED, pronta pra execução com TDD quando o usuário pedir) — ver D-2026-08-28-5
 - [x] `features/backup-strategy/spec.md` — backup local ativo e testado (SQLite, Postgres, 4 volumes Docker, Vault keys — 89MB, restore validado de verdade). Pain point aberto desde 12/08, **resolvido**. R2 (redundância remota) pronto no código, desativado de propósito (usuário não quer gastar ainda). Cron configurado, daemon precisa `sudo service cron start` (usuário)
-- [ ] Débito de código achado pelo CI novo (fora do escopo de infra, backlog do produto): CVE crítico `tar@7.5.11` + erros `tsc` em artists-booking
+- [ ] Débito de código achado pelo CI novo (fora do escopo de infra, backlog do produto): CVE crítico `tar@7.5.11` + erros `tsc` em artists-booking — **prompt de delegação pro harness-dev pronto (D-2026-09-16-1), não disparado ainda**
 
 ## Ambiente de Desenvolvimento — Fase 1 DONE (repo criado, dry-run validado)
 
@@ -70,7 +70,7 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 - [ ] Validar `darwin.yml` no primeiro Mac real
 - Ver D-2026-08-27-21
 
-## Débito de teste achado pelo bump Node 22->24 (infra-full-upgrade-2026-09) — backlog do produto
+## Débito de teste achado pelo bump Node 22->24 (infra-full-upgrade-2026-09) — backlog do produto — prompts de delegação prontos (D-2026-09-16-1), não disparados
 
 Achado durante o bump de runtime (harness-infra só troca imagem base + roda gate, não conserta
 código de app — ver `.specs/features/infra-full-upgrade-2026-09/spec.md` D4). Confirmado via
@@ -90,7 +90,7 @@ quem pegar a spec — não pré-julgado aqui):
   `GET /api/auth/google/callback`) — não investigado a fundo, reproduzido de forma consistente
   (3x) tanto em Node 22 quanto Node 24
 
-## Débito de segurança de dependências achado ao instalar trivy/osv-scanner de verdade (2026-09-15)
+## Débito de segurança de dependências achado ao instalar trivy/osv-scanner de verdade (2026-09-15) — prompt de delegação pronto (D-2026-09-16-1), não disparado, marcado urgente
 
 Achado como efeito colateral de instalar as ferramentas de gate que faltavam nesta máquina
 (D-2026-09-15-2 item 8) — nunca tinham rodado de verdade localmente antes (só em CI, onde os

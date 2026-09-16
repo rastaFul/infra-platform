@@ -1,5 +1,30 @@
 # DECISIONS
 
+## D-2026-09-16-1: débito de produto delegado ao harness-dev via prompts prontos (não disparados ainda)
+Usuário pediu prompts separados por projeto pra colar numa sessão `claude --agent harness-dev`
+dentro de cada repo, cobrindo o débito de produto achado durante `infra-full-upgrade-2026-09` e
+seus follow-ups (nunca corrigido aqui de propósito — fora do escopo do harness-infra). 3 prompts
+preparados, ainda NÃO disparados pelo usuário (fica a critério dele quando/se rodar):
+
+- **artists-booking**: (1) `apps/api/Dockerfile.dev` quebrado (`ERR_PNPM_IGNORED_BUILDS`, pnpm sem
+  pin via corepack, diferente dos outros 2 Dockerfiles do repo); (2) 7/277 testes flaky por
+  timeout 5000ms (`health.test.ts`, `auth.routes.test.ts`, `review.routes.test.ts`,
+  `observability.plugin.test.ts`), confirmado idêntico em Node 22/24 via A/B; (3) débito antigo
+  pré-existente nunca triado: CVE crítico `tar@7.5.11` + erros `tsc`.
+- **rastafinancas**: (1) **urgente** — 3 CRITICAL+31 HIGH (trivy_fs) e 6 CRITICAL+36 HIGH
+  (osv-scanner) em dependências reais do `package-lock.json`, nunca visto antes de instalar as
+  ferramentas de gate de verdade nesta máquina (D-2026-09-15-2 item 8); (2) 2/171 testes falhando
+  por timeout em `src/routes/oauth.test.ts` (`GET /api/auth/google/callback`), reproduzido 3x,
+  idêntico em Node 22/24.
+- **vetcare**: verificar se `.specs/features/observability-metrics/spec.md` (delegada em
+  2026-08-28, D do Batch 2) já foi executada — não confirmado nesta sessão. Se não, executar
+  (`/metrics` real, depois cadastrar job no `prometheus.yml` do infra-platform — avisar o
+  harness-infra pra essa parte, não é escopo do vetcare mexer no infra-platform direto).
+
+Texto completo dos 3 prompts: na conversa desta sessão (harness-infra), não replicado aqui por
+extenso — se precisar recuperar, procurar a mensagem do assistente que respondeu "Aqui estão os 3
+prompts, um por projeto" nesta sessão de 2026-09-16.
+
 ## D-2026-09-15-3: respostas às 9 dúvidas de D-2026-09-15-2
 Usuário revisou e decidiu, item a item:
 1. InfluxDB 2.7 antigo: sem decisão explícita ainda, continua rodando como rollback.
