@@ -51,7 +51,16 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
 - [x] 4 roles escritas: `credentials-check`, `packages`, `dotfiles`, `agents-harness`
 - [x] Gates: `--syntax-check` PASS, `--check --diff` dry-run PASS (0 failed)
 - [x] Rodar de verdade nesta máquina (não `--check`) — feito 2026-08-28, 2 bugs reais achados/corrigidos (templates `ansible_managed` sem `#`, bug do módulo `git` no ansible-core 2.13.13), drift de `~/.claude/skills`/`steering` fechado. Ver D-2026-08-28-1
-- [ ] `ansible-lint` — pendente máquina com Python 3.9+
+- [x] `ansible-lint` — desbloqueado 2026-09-16 (máquina só tinha Python 3.8, `ansible-lint`
+  precisa 3.10+). Python 3.12.14 instalado via `uv` (sem sudo, binário prebuilt em
+  `~/.local/share/uv/python/`), `ansible-lint` 26.8.0 instalado via `uv tool install` (isolado,
+  não mexe no Python 3.8 do sistema). Rodado de verdade pela primeira vez: **29 achados reais em
+  14/18 arquivos** (profile `min` passa, `basic` não) — var-naming sem prefixo de role (9),
+  risky-file-permissions (4), ignore-errors em vez de failed_when (2), command-instead-of-module
+  (curl em vez de get_url, 3), role-name fora do padrão (`credentials-check`, 2), risky-shell-pipe
+  sem pipefail (1), name[template] com Jinja no meio do nome da task (2), yaml formatting (2),
+  latest[git] sem versão fixa (1), no-changed-when (1). Nenhum corrigido ainda — achados reais,
+  registrados, aguardando decisão do usuário se quer que sejam corrigidos agora.
 - [ ] Validar `darwin.yml` no primeiro Mac real
 - Ver D-2026-08-27-21
 

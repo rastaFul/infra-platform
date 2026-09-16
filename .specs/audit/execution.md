@@ -811,3 +811,19 @@ achado do item 2 — mas a query já está correta e vai zero-preencher assim qu
 Arquivo: `platform/dashboards/microgrow/grow-cockpit.json`.
 
 Status: DONE (T1/T2/T3 + itens 8/9 desta rodada de follow-ups)
+
+## ROADMAP item 7: ansible-lint desbloqueado (dev-environment) — 2026-09-16T00:00:00-03:00
+- Achado: máquina só tinha Python 3.8.10 (Ubuntu 20.04 Focal), sem sudo disponível
+  (`sudo -n true` falhou), ansible-lint 26.x precisa Python 3.10+.
+- Instalado `uv` 0.12.15 (script oficial, real bug achado: `curl | sh` quebra por bashismo do
+  próprio script da astral rodando sob `sh`/dash — funciona rodando explicitamente com `bash`,
+  não é nada deste repo, registrado só pra não confundir sessão futura).
+- Python 3.12.14 instalado via `uv python install` (binário prebuilt, sem sudo, sem afetar o
+  Python 3.8 do sistema).
+- `ansible-lint` instalado via `uv tool install --python 3.12 ansible-lint` (isolado, shim em
+  `~/.local/bin/ansible-lint`) — achado um shim quebrado pré-existente no mesmo caminho (de
+  27/08, tentativa antiga que nunca funcionou sob Python 3.8), sobrescrito com `--force`.
+- Gate real: `ansible-lint` rodado contra `dev-environment/site.yml` — 26.8.0 + ansible-core
+  2.21.4 confirmados. Resultado: 29 achados reais em 14/18 arquivos processados, profile `min`
+  atingido, `basic` não. Nenhuma correção aplicada nesta rodada — aguardando decisão do usuário.
+- Status: DONE (ferramenta desbloqueada e rodando de verdade — o objetivo do item do ROADMAP)
