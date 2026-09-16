@@ -61,6 +61,12 @@ Primeira versão deste arquivo — nunca existiu antes (só `STATE.md`/`DECISION
   `ansible-lint` limpo em profile `production` (0/0). Bônus: rodando o playbook de verdade depois
   achou 2 bugs reais a mais (plugin `community.general.yaml` removido, collection nem instalada)
   — corrigidos, `--syntax-check` e `--check --diff` PASS. Commit `8311037` (dev-environment).
+  **Depreciação `INJECT_FACTS_AS_VARS` também eliminada** (2026-09-16): todo `ansible_env.X`/
+  `ansible_kernel` migrado pro namespace `ansible_facts['env']['X']`/`ansible_facts['kernel']`,
+  toolchain de execução padronizado em `ansible-core` 2.21.4 via `uv` (substitui o `pip3 install
+  --user ansible` antigo sob Python 3.8), bug antigo do módulo `git` retestado ao vivo e
+  confirmado resolvido nesta versão (não é mais `noqa`, virou `ansible.builtin.git` de verdade).
+  0 deprecation warnings num `--check --diff` real. Commit `e6d137d`.
 - [ ] Validar `darwin.yml` no primeiro Mac real
 - Ver D-2026-08-27-21
 

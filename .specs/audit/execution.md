@@ -867,3 +867,30 @@ Achado registrado, NÃO corrigido (fora do escopo aprovado, refactor grande): to
 remoção planejada pro 2.24) -- a instalação real documentada no README usa ansible-core bem mais
 antigo sob Python 3.8, não este.
 Status: DONE
+
+## ROADMAP item 7 (conclusão): deprecation INJECT_FACTS_AS_VARS eliminada, ansible-core padronizado — 2026-09-16T00:30:00-03:00
+Usuário pediu tratar agora o achado de depreciação registrado na rodada anterior e deixar na
+versão LTS mais atual. Feito no `dev-environment` (commit `e6d137d`, pushed):
+- Migrado TODO uso de fato "injetado no topo" pro namespace moderno em todos os roles + site.yml:
+  `ansible_env.X` -> `ansible_facts['env']['X']`, `ansible_kernel` -> `ansible_facts['kernel']`.
+  `INJECT_FACTS_AS_VARS` está deprecated, remoção prevista pro ansible-core 2.24 -- zero warning
+  de depreciação agora num `--check --diff` real.
+- Padronizado o toolchain de EXECUÇÃO (não só lint) em `ansible-core` 2.21.4 via
+  `uv tool install ansible-core` (mesmo Python 3.12 isolado já usado pro ansible-lint) --
+  substitui o `pip3 install --user ansible` antigo, que resolvia uma versão bem mais velha de
+  ansible-core sob o Python 3.8 de sistema. README atualizado com os passos de instalação novos
+  (+ alternativa simples via pip3 se a máquina já tiver Python 3.10+ nativo).
+- Achado real ao instalar via `uv tool install ansible`: só expõe o executável `ansible-community`
+  por padrão (não `ansible-playbook`/`ansible-galaxy`, que vêm do pacote `ansible-core`
+  transitivo) -- corrigido instalando `ansible-core` diretamente com `--force` pra sobrescrever os
+  shims antigos (de 27/08, pip3 sob Python 3.8) que já ocupavam `~/.local/bin`.
+- **Revisitado e resolvido o `# noqa` do módulo git**: o bug documentado (`TypeError` computando
+  opções de SSH, achado 2026-08-28 contra ansible-core 2.13.13/Python 3.8) foi retestado AO VIVO
+  contra o repo real `agents-harness` via SSH sob 2.21.4 antes de reverter o workaround -- não
+  reproduz mais. `roles/agents_harness/tasks/main.yml` simplificado de 3 tasks (stat+2 shells) pra
+  1 task só (`ansible.builtin.git`, clone-or-update nativo).
+- Verificação final: `ansible-lint` 0/0 profile `production`, `--syntax-check` PASS,
+  `--check --diff --skip-tags packages` PASS (0 failed, 0 deprecation warnings, comportamento de
+  drift idêntico ao de antes).
+Status: DONE — item 7 do ROADMAP fechado por completo (desbloqueio + 29 achados + depreciação +
+padronização de versão).
