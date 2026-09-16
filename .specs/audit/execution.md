@@ -827,3 +827,43 @@ Status: DONE (T1/T2/T3 + itens 8/9 desta rodada de follow-ups)
   2.21.4 confirmados. Resultado: 29 achados reais em 14/18 arquivos processados, profile `min`
   atingido, `basic` não. Nenhuma correção aplicada nesta rodada — aguardando decisão do usuário.
 - Status: DONE (ferramenta desbloqueada e rodando de verdade — o objetivo do item do ROADMAP)
+
+## ROADMAP item 7 (continuação): 29 achados do ansible-lint corrigidos — 2026-09-16T00:15:00-03:00
+Usuário aprovou corrigir os 29 achados registrados na rodada anterior. Todos corrigidos no repo
+`dev-environment` (commit `8311037`, pushed):
+- Renomeado `roles/agents-harness`->`agents_harness`, `roles/credentials-check`->`credentials_check`
+  (nome de role não aceita hífen) -- `site.yml` e `README.md` atualizados, tags do playbook
+  continuam hifenizadas (regra não se aplica a tags).
+- 9x var-naming: todas prefixadas com o nome do role, exceto `is_wsl` (fato genuinamente
+  compartilhado entre 3 roles, já setado uma vez em `site.yml` pre_tasks) -- a re-declaração
+  redundante dentro de `dotfiles/tasks/main.yml` foi REMOVIDA em vez de renomeada (era dead code:
+  mesma expressão computada 2x).
+- 4x risky-file-permissions: `mode: preserve` em vez de um modo fixo -- decisão deliberada porque
+  2 dos casos (skills/steering) sincronizam diretório misto com scripts `.sh` executáveis; um modo
+  fixo tipo 0644 teria removido o `+x` de verdade.
+- 2x ignore_errors: substituído por `stat` + `when:` (verifica existência real do arquivo antes,
+  em vez de engolir qualquer erro cegamente).
+- command-instead-of-module (curl) + risky-shell-pipe: instalador do nvm dividido em `get_url`
+  (download) + `command` (execução) -- elimina o pipe `curl | bash` inteiro.
+- command-instead-of-module (git) x2: MANTIDO com `# noqa` -- documentado desde 2026-08-28 que
+  `ansible.builtin.git` quebra de verdade contra o `ansible-core` que essa máquina normalmente usa
+  pra rodar o playbook (bug real já encontrado antes, não re-introduzido).
+- latest[git] (oh-my-zsh): `version: master` explícito + `noqa` (sem tags de release reais, tracking
+  master é intencional).
+- 2x name[template]: Jinja movido pro fim do nome da task.
+- yaml[commas]/line-length (`group_vars/all.yml`): `project_aliases` reformatado de flow-mapping
+  alinhado manualmente pra block-style + `>-` fold no comando mais longo.
+- yaml[line-length] extra (achado durante o próprio processo de correção, quando o rename de
+  variável alongou uma linha): resolvido com `vars:` de bloco pra encurtar a referência repetida.
+**2 bugs reais adicionais achados RODANDO o playbook de verdade depois do lint limpo** (não só
+lint, execução real): `ansible.cfg` com `stdout_callback = yaml` dependia do plugin
+`community.general.yaml`, removido da collection na v12.0.0 -- trocado por
+`ansible.builtin.default` + `result_format = yaml` nativo; `community.general` nem estava
+instalado como collection (instalado agora, elimina os 4 warnings de "Unable to load module").
+Verificação final: `ansible-lint` 0/0 profile `production`, `--syntax-check` PASS,
+`--check --diff --skip-tags packages` PASS (0 failed, mesmo comportamento de drift de antes).
+Achado registrado, NÃO corrigido (fora do escopo aprovado, refactor grande): toda referência
+`ansible_env.HOME` dispara aviso de depreciação sob ansible-core 2.21.4 (`INJECT_FACTS_AS_VARS`,
+remoção planejada pro 2.24) -- a instalação real documentada no README usa ansible-core bem mais
+antigo sob Python 3.8, não este.
+Status: DONE
