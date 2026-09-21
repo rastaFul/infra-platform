@@ -1422,3 +1422,12 @@ registrado, aguardando decisão).
 - Pendente (não automatizável): usuário confirmar recebimento visual no inbox
   rodrigob.dev@gmail.com.
 - Status: DONE (ativação técnica) / aguardando confirmação visual do usuário
+
+## Task: infra-platform — flip final para público — 2026-09-21T20:26:00-03:00
+- Revisão manual dos docs (menções ao trabalho atual/Pontaltech): aprovada
+  pelo usuário.
+- gitleaks (já validado em rodada anterior): PASS, sem histórico sensível
+  (repo nunca teve .env real trackeado).
+- visibilidade: PRIVATE -> PUBLIC
+- pin no perfil: não tentado (API do GitHub não suporta pin programático)
+- Status: DONE
