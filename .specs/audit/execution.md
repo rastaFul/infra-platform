@@ -1,3 +1,117 @@
+## Task: docker-disk-cleanup — 2026-09-21
+
+Pedido do usuário: "está ocupando todo o meu disco principal" (C:, 9.1GB livres de 477GB, 99% uso).
+Ação de manutenção (não infra-código) — sem spec formal por ser operação de limpeza reversível/
+read-diagnóstico-primeiro; gates externos não aplicáveis (não é terraform/k8s/helm), verificação
+externa = `docker system df` antes/depois + `df -h`.
+
+Diagnóstico:
+- Docker Desktop estava `Stopped` (WSL integration não ativa nesta distro) — iniciado via
+  `Start-Process`, daemon pronto em ~20s.
+- `docker system df` antes: Images 42.93GB (95 total, 25 ativas, 61% reclaimable), Build Cache
+  44.8GB (717 entradas, 0 ativas, 100% reclaimable), Volumes 3.39GB (1.73GB reclaimable),
+  Containers 656.5MB (33 rodando, 0 reclaimable).
+- Causa raiz do disco cheio: `C:\Users\rodri\AppData\Local\Docker\wsl\disk\docker_data.vhdx` = 88GB
+  (WSL2 backend, disco virtual dinâmico que não encolhe sozinho no host Windows mesmo após prune).
+
+Ações executadas (seguras, sem tocar imagem com tag nem volume em uso):
+- `docker image prune -f` — 63 imagens dangling removidas, 10.82GB reclaimados (dentro do container fs)
+- `docker builder prune -af` — 718 entradas de build cache, 44.8GB reclaimados
+- `docker container prune -f` — 0B (todos os 33 containers estavam `Up`, nada pra remover)
+- `docker system df` depois: Images 16.15GB (32 total), Build Cache 0B, Volumes inalterado (não tocado)
+
+Verificação externa: `docker system df --format json` antes/depois confirma reclaimable real
+(não auto-reportado). `df -h /mnt/c` ainda mostra 9.1GB livres — esperado: prune libera espaço
+DENTRO do VHDX ext4, mas o arquivo `docker_data.vhdx` no NTFS do Windows não encolhe automaticamente
+(sparse/dynamic VHD sem TRIM automático neste ambiente). Compactação do VHDX (`Optimize-VHD` /
+`diskpart compact vdisk`) é o passo que de fato libera os 9.1GB→~65GB no C: real — requer parar
+Docker Desktop (derruba os 33 containers) e `wsl --terminate docker-desktop`/`docker-desktop-data`
+(não afeta a distro `Ubuntu-20.04` onde esta sessão roda). **Não executado — aguardando confirmação
+do usuário** por causa da disrupção aos containers rodando agora.
+
+Não executado (pedindo confirmação antes, risco maior que "artefato intermediário"):
+- `docker image prune -a` (removeria ~12GB adicionais de imagens COM tag não usadas por container
+  ativo, ex: `artists-booking-api:pre-spec77-rollback` — pode ser rollback intencional)
+- `docker volume prune` (1.73GB, volumes dangling — possível dado de projeto parado)
+
+- Status: PARTIAL (limpeza segura de artefatos intermediários DONE; compactação do VHDX + prune
+  agressivo de imagens/volumes aguardando decisão do usuário)
+
+## Task: docker-disk-cleanup (continuação) — prune agressivo + compactação — 2026-09-21
+
+Usuário aprovou explicitamente ("Pode aplicar as duas sugestões... compactar... 12Gb a mais com
+as imagens não usadas").
+
+1. `docker image prune -a -f`: 7 imagens com tag removidas (não referenciadas por container ativo).
+   `docker system df` depois: Images 12.19GB (25 total, 25 ativas, 0% reclaimable) — era 16.15GB/32.
+   Volumes (1.726GB reclaimable/11 dangling) NÃO tocado — fora do pedido explícito do usuário.
+   Status: DONE.
+
+2. Compactação `docker_data.vhdx` — tentativa passo a passo:
+   - `Stop-Process 'Docker Desktop'/'com.docker.backend'/'com.docker.build'` — PASS, 0 processos
+     docker* restantes confirmado via `Get-Process`.
+   - `wsl --terminate docker-desktop` — PASS. `docker-desktop-data` não existe como distro separada
+     nesta instalação (achado real, não assumido).
+   - `Get-Service com.docker.service` — `Stopped`, confirmado.
+   - `wsl --manage docker-desktop --set-sparse true` — rejeitado pelo próprio WSL ("Sparse VHD
+     support is currently disabled due to potential data corruption"), exigiria `--allow-unsafe` —
+     **não usado**, risco de corrupção de dado real não vale a economia de disco.
+   - `diskpart /s harness-compact.txt` (select vdisk + attach readonly + compact + detach), via
+     `Start-Process -Verb RunAs` (elevação UAC, aprovada pelo usuário na tela em ~10s): **falhou 3x
+     seguidas**, mesmo erro — "DiskPart has encountered an error: The process cannot access the
+     file because it is being used by another process." Monitorado ativamente por 200s (tamanho do
+     arquivo não mudou, `94373937152` bytes = ~87.9GB, igual ao inicial) — não é lentidão, é lock
+     persistente.
+   - Investigado: `Get-Service vmcompute` = `Running` (esperado, compartilhado por todas as distros
+     WSL2, `Ubuntu-20.04` continua `Running`); nenhum processo `docker*` remanescente; `Get-Disk`/
+     `diskpart list disk` sem admin não retornaram nada conclusivo.
+   - **Decisão de segurança**: NÃO executado `wsl --shutdown` (única solução conhecida além de
+     restart do Windows) — mataria a própria sessão do Claude Code (roda dentro da distro
+     `Ubuntu-20.04` deste WSL2), sem possibilidade de fechar o registro depois. Escalado pro
+     usuário via runbook + STATE.md, não é um "não fiz" silencioso.
+   - Docker Desktop religado (`Start-Process`) pra não deixar o stack local parado. Confirmado:
+     33/33 containers `Up` de novo (política `restart: always`), `docker system df` pós-restart:
+     Images 12.19GB/25, Containers 656.5MB/33, Volumes 3.374GB (1.726GB reclaimable, inalterado),
+     Build Cache 0B. `df -h /mnt/c`: 8.2GB livres (variação normal de uso do sistema, não regressão
+     desta sessão — nenhuma escrita nova nossa entre as duas medições).
+   - Status: BLOCKED (ação pendente do usuário — reiniciar Windows ou `wsl --shutdown` manual fora
+     desta sessão, depois rodar `C:\Users\rodri\AppData\Local\Temp\harness-compact.txt` via
+     diskpart elevado, ANTES de religar o Docker Desktop). Procedimento documentado em
+     `docs/how-to/docker-disk-cleanup.md`.
+
+3. Registro: runbook `docs/how-to/docker-disk-cleanup.md` criado. Backlog de automação (prune
+   pós-build, checagem periódica, política de retenção de tags rollback) adicionado em
+   `.specs/project/ROADMAP.md` ("Docker disk lifecycle — backlog") — spec formal ainda não
+   escrita, aguardando o usuário priorizar. Decisão completa: D-2026-09-21-1 em DECISIONS.md.
+
+- Status geral da task: PARTIAL — prune agressivo DONE e verificado; compactação do VHDX BLOCKED
+  (ação manual do usuário necessária); runbook + backlog registrados conforme pedido.
+
+## Task: docker-disk-lifecycle (spec) — 2026-09-21
+
+Usuário aprovou execução direta ("Pode executar a spec criada"). Spec formal criada e executada
+end-to-end na mesma sessão: `.specs/features/docker-disk-lifecycle/spec.md` (5 decisões D1-D5,
+6 tasks, todas DONE).
+
+- shellcheck `scripts/docker-disk-guard.sh`: PASS (0 findings, exit 0)
+- Execução real (não só sintaxe): `docker image prune -f` (0B — já limpo pela sessão anterior),
+  `docker builder prune -af` (0B — idem), threshold check `docker_data.vhdx` = 87GB (>= 40GB → WARN
+  disparado corretamente), C: livre = 5GB (<= 20GB → WARN disparado corretamente), scan de tags
+  rollback = 0 flagged (confirmado via `docker images` real: `pre-spec77-rollback` não existe mais,
+  já removida pelo prune agressivo anterior — não é bug do script)
+- crontab: entrada `35 3 * * * .../docker-disk-guard.sh >> ~/logs/docker-disk-guard.log 2>&1`
+  instalada, `~/logs/` criado, daemon `cron` confirmado `running` (sem gap de ativação, diferente
+  do `backup.sh` original)
+- `docs/how-to/docker-disk-cleanup.md` atualizado (seção nova linkando o guard, escopo manual
+  explícito documentado)
+- `.specs/project/ROADMAP.md`: item "Docker disk lifecycle" marcado DONE (exceto compactação —
+  deliberadamente manual, D4)
+- **Achado fora do escopo original, registrado**: C: caiu de 8.2GB→5GB livres entre a sessão
+  anterior e esta execução (poucos minutos, sem ação nossa) — consumo ativo de outro processo do
+  Windows não investigado. Confirma que os thresholds do guard (D2) já são necessários de verdade,
+  não teóricos.
+- Status: DONE (spec `docker-disk-lifecycle` completa e verificada)
+
 ## Task 1: Create infra-platform repository scaffold — 2026-08-12T01:10:33-03:00
 - tsc --noEmit: N/A (no TypeScript)
 - eslint: N/A (no TypeScript)
@@ -904,3 +1018,330 @@ começa frio em cada projeto). Registrado em D-2026-09-16-1 (DECISIONS.md) + ROA
 o status "prompt pronto, não disparado" nos 3 blocos correspondentes. Nenhuma ação de código
 executada — é só preparação de handoff, execução fica a critério do usuário.
 Status: DONE (preparação) — execução real depende do usuário disparar os prompts.
+
+## Incidente: platform-loki crash-loop (index_20712 corrompido) — 2026-09-17
+- Diagnóstico: `docker logs`/`docker inspect` reais — RestartCount=1065, crash-loop desde
+  2026-09-16 ~06:38 (~32h sem ingestão de log em toda a plataforma). Causa raiz isolada via
+  container debug com o volume `platform_loki_data` montado: shard de índice do período TSDB
+  `index_20712` (`.../chunks/index/index_20712/...tsdb.gz`) era um arquivo de 0 bytes (`mmap,
+  size 0: invalid argument` / `gzip: invalid magic`) — resíduo de uma limpeza pós-compactação
+  interrompida (provável kill/restart do WSL2/Docker Desktop no mesmo instante, correlaciona com
+  `.tsdb.temp` órfão e timestamps 06:37-06:38 de 16/09). Dado já estava preservado no shard
+  compactado (`fake/...3d209f25.tsdb.gz`, válido) — confirmado ANTES de remover qualquer coisa
+  (não assumido).
+- Backup: 3 diretórios (`chunks/index/index_20712`, `tsdb-shipper-active/multitenant/index_20712`,
+  `tsdb-shipper-cache/index_20712`) copiados via `docker cp` para scratchpad da sessão antes de
+  qualquer remoção.
+- Fix: removidos 4 artefatos órfãos/corrompidos (o `.tsdb.gz` de 0 bytes + `.tsdb`/`.tsdb.temp`
+  locais do builder + cópia de cache de 0 bytes) via container `busybox` com o volume montado
+  read-write. `docker restart platform-loki`.
+- Verificação externa (gate real, não assumido):
+  - `docker inspect`: Status=running, RestartCount=0, ExitCode=0, estável (sem novo crash em
+    >45s, vs. restart a cada ~2s antes do fix).
+  - `curl /ready` → `ready` (após warmup normal de 15s do ingester).
+  - `curl /metrics` → `loki_build_info` presente (3.7.7).
+  - `curl /loki/api/v1/query_range` → 2 streams reais com timestamp atual (`microgrow-api`,
+    `microgrow-mosquitto`) confirmando ingestão de log **de fato** retomada, não só "container Up".
+- Achado colateral registrado, não corrigido: `platform-loki` no compose atual não tem
+  `HEALTHCHECK`/healthcheck do Compose configurado (`docker inspect .State.Health` = ausente) —
+  o crash-loop de 32h nunca gerou alerta automático porque não há liveness/healthcheck nem alerta
+  Prometheus cobrindo "container reiniciando". Ver DECISÃO/pendência.
+- Status: DONE
+
+## Follow-up: monitoramento externo do platform-loki (healthcheck + alertas) — 2026-09-17
+- Confirmado empiricamente (de novo, ao vivo): imagem `grafana/loki:3.7.7` não tem `sh`/`wget`/
+  `curl` — Docker HEALTHCHECK via CMD-SHELL/CMD é inviável sem imagem derivada custom. Decisão:
+  monitoramento externo via Prometheus, não healthcheck de container.
+- `platform/prometheus/prometheus.yml`: novo job `loki` (`loki:3100/metrics`).
+- `platform/grafana/provisioning/alerting/platform.yaml` (novo arquivo, flat, mesmo padrão dos
+  outros): 2 regras — `alert-loki-down` (`up{job="loki"}==0` por 2min) e
+  `alert-loki-crash-looping` (`changes(process_start_time_seconds{job="loki"}[15m])>3`).
+- **Bug real achado e corrigido durante a verificação**: as regras copiadas do padrão existente
+  (`type: reduce` como nó final do `condition`, com `conditions[]` aninhado) NÃO avaliam threshold
+  nenhum — um nó `reduce` só reduz o valor, não tem semântica de comparação; o array `conditions`
+  aninhado nele é resíduo de UI, ignorado pelo motor de alerta. Resultado: a regra fica `Alerting`
+  sempre que há QUALQUER dado, independente do valor. Corrigido pra `type: classic_conditions`
+  (nó único, autocontido, avalia o `evaluator` de verdade). Verificado com CICLO COMPLETO real:
+  (1) Loki saudável → `state: inactive`/`Normal` nas 2 regras; (2) `docker stop platform-loki` →
+  após os 2min de `for`, `alert-loki-down` foi a `state: firing`/`Alerting` de verdade (`value: 0`);
+  (3) `docker start platform-loki` → voltou a `inactive`/`Normal` após o Loki ficar `/ready`.
+- **Achado colateral grave, fora do escopo pedido, NÃO corrigido**: ao verificar minhas 2 regras
+  novas, descobri que TODAS as ~27 regras pré-existentes da plataforma (microgrow, rastafinancas,
+  artists-booking) usam o MESMO padrão quebrado (`type: reduce` como condition final) — confirmado
+  via `GET /api/prometheus/grafana/api/v1/rules`: no momento da checagem, TODAS estavam
+  `state: firing`, inclusive as que claramente não deveriam estar (ex.: "RastaFinancas API
+  Offline" com a API rodando normal). Motivo de nunca ter sido percebido: SMTP (Gmail) do canal de
+  alerta está com credencial inválida desde antes (D-2026-09-01-1) — notificações nunca chegaram,
+  só o estado interno do Grafana ficou errado silenciosamente. Registrado como decisão pendente
+  (D-2026-09-17-2) — não corrigido sem confirmação explícita do usuário (escopo grande: reescrever
+  ~27 regras em 3 arquivos de produtos diferentes).
+- Bug real adicional encontrado no processo (já documentado antes, reconfirmado): bind-mount órfão
+  do WSL2/Docker Desktop — `docker restart platform-prometheus` falhou (`mount ... no such file or
+  directory`) depois de editar `prometheus.yml` no host; `docker compose up -d --force-recreate`
+  necessário em vez de `restart` simples, mesma classe de bug do D-2026-09-09-1.
+- Verificação final: `docker compose config` PASS, 12/12 containers do platform stack `Up`/healthy.
+- Status: DONE (2 alertas novos corrigidos e testados ponta a ponta); achado dos 27 alertas
+  pré-existentes: PENDENTE DE DECISÃO DO USUÁRIO.
+
+## Follow-up: correção das 27 regras pré-existentes + SMTP Resend — 2026-09-17
+- Script Python (`ruamel.yaml`, indentação preservada, diff mínimo) converteu as ~27 regras
+  pré-existentes de `type: reduce` (bugado, nunca avalia threshold) pra `type: classic_conditions`
+  (correto, autocontido) em `microgrow.yaml` (15), `rastafinancas.yaml` (6), `artists-booking.yaml`
+  (6, incluindo a regra com nó intermediário `math` — `query.params` continuou apontando certo).
+- `docker compose up -d --force-recreate grafana` (não `restart`, mesmo bug de bind-mount do
+  D-2026-09-09-1/D-2026-09-17-2) + esperado 2 ciclos de avaliação (interval 1-2min) + verificado via
+  `GET /api/prometheus/grafana/api/v1/rules`.
+- **Resultado real**: os 8 alertas baseados em Prometheus (5 artists-booking p0 + 1 p1 + 2 novos do
+  Loki) foram corretamente pra `state: inactive`/`Normal` — fix confirmado funcionando pros casos
+  onde o datasource está saudável.
+- **Achado novo, grave, fora do escopo original**: os outros 21 (15 microgrow + 6 rastafinancas,
+  todos os que usam InfluxDB) continuam `state: firing`, mas agora por causa de um erro REAL e
+  DIFERENTE: `[sse.dataQueryError] ... flightsql: ... No SQL statements were provided in the query
+  string`. Causa: as 21 regras usam `type: flux` (sintaxe Flux), mas `datasourceUid:
+  influxdb-microgrow`/`influxdb-rastafinancas` foi migrado pra InfluxDB 3 (só fala SQL/FlightSQL)
+  na sessão `infra-full-upgrade-2026-09` (2026-09-15, D3) — confirmado em
+  `platform/grafana/provisioning/datasources/datasources.yml` (`url: http://influxdb3:8181`,
+  `jsonData.version: SQL`). Aquela migração reescreveu os 76 queries de DASHBOARD (D-2026-09-15-2
+  reporta "76/76 traduzidas"), mas nunca tocou nas 21 queries de ALERTA — gap que ficou invisível
+  até agora porque o bug do `classic_conditions` já deixava tudo "firing" de qualquer forma,
+  mascarando o erro de execução por baixo.
+- Confirmado que NÃO existe mais datasource Flux-compatível registrado no Grafana (o comentário em
+  `datasources.yml` diz "kept below, commented out" mas isso está desatualizado — não há bloco
+  comentado no arquivo atual). O container `platform-influxdb` (v2.7) ainda está `Up`/healthy como
+  rollback, mas repontar os alertas pra ele seria débito técnico novo (contradiz a decisão já
+  tomada de migrar tudo pra v3/SQL, e esse container já está marcado como candidato a desligar,
+  D-2026-09-15-2 item 1) — não fiz isso.
+- SMTP: `GF_SMTP_USER`/`GF_SMTP_PASSWORD` adicionados no compose (antes nem existiam — não era só
+  credencial inválida, não havia credencial nenhuma), `SMTP_HOST` trocado pra `smtp.resend.com:587`
+  em `.env`/`.env.example`, doc `docs/how-to/setup-resend-smtp-alerts.md` criado com os passos que
+  precisam de ação do usuário (criar conta Resend, verificar domínio `rastaful.dev`, gerar API key)
+  — `SMTP_PASSWORD` deixado vazio de propósito, nunca inventado. `docker compose config` PASS com
+  as novas env vars. Envio real de e-mail NÃO pôde ser testado (sem API key) — BLOQUEADO até ação
+  do usuário, mesmo padrão do R2/Oracle/Terraform Cloud já usados neste repo.
+- Status: PARTIAL. Fix dos 27 formatos: DONE e verificado. SMTP: wiring DONE, ativação BLOQUEADA
+  (ação externa do usuário). Achado dos 21 Flux/SQL: REGISTRADO, NÃO CORRIGIDO — aguardando decisão
+  explícita do usuário antes de reescrever 21 queries (mesmo escopo/risco da migração de 76 queries
+  de dashboard já feita em 2026-09-15, inclusive lógica não-trivial como o p95 do rastafinancas por
+  buckets de histograma).
+
+## Follow-up: tradução Flux→SQL das 21 queries de alerta InfluxDB — 2026-09-17
+- Schema real consultado ao vivo via `/api/v3/query_sql` (SHOW TABLES / SELECT * LIMIT 1) em vez de
+  supor a partir do Flux antigo — achado real: `sensors` (microgrow) só tem `api_metrics` e
+  `mqtt_broker` como tabelas existentes; `soil_moisture`, `air_conditions`, `reservoir`,
+  `hydric_score`, `reservoir_drain_event`, `lights_compliance`, `irrigation_outcome`, `grow_cycle`
+  NÃO existem (confirmado `Error during planning: table ... not found`) — simulador pausado desde
+  antes da migração de 15/09 nunca escreveu essas medições no InfluxDB 3 (mesma causa raiz já
+  registrada em D-2026-09-15-3, painéis do `grow-cockpit.json` já mostram isso hoje). `rastafinancas`
+  tem as 6 tabelas necessárias todas ativas com dado real.
+- 21 queries traduzidas (script `sql_map.py` + `fix_sql.py`, ruamel.yaml, mesma técnica de diff
+  mínimo) seguindo a convenção já usada nos dashboards (tabela=measurement, colunas=fields/tags
+  diretos, `time >= now() - INTERVAL 'X'`, `ORDER BY time DESC LIMIT 1` pra `last()`,
+  `ROW_NUMBER() OVER (PARTITION BY ...)` pra dedupe por série antes de somar — mesma técnica do
+  `rasta-latency-p95`, preservando a lógica de buckets de histograma p95 1:1).
+- **Gate externo real, não assumido**: todas as 21 queries testadas direto via
+  `POST /api/v3/query_sql` antes de tocar o Grafana. Resultado: 6/6 rastafinancas OK com dado real
+  (`rasta-api-down`=0, `rasta-error-rate-critical`=0.0%, `rasta-latency-p95`=10ms,
+  `rasta-import-errors`=59, `rasta-notif-job-down`=0, `rasta-web-down`=0); 3/15 microgrow OK
+  (`alert-api-down`=17, `alert-api-latency`=0.86ms, `alert-mqtt-broker-down`=sem linha no range);
+  12/15 microgrow com erro esperado e específico `table not found` (nenhum outro tipo de erro —
+  confirma sintaxe SQL 100% correta, só falta a tabela existir).
+- `docker compose up -d --force-recreate grafana` + 2 ciclos de avaliação esperados.
+- **Achado real durante a verificação**: 3 dos 6 rastafinancas (`rasta-latency-p95`,
+  `rasta-notif-job-down`, `rasta-web-down`) mostraram erro transitório
+  `flightsql: rpc error: code = InvalidArgument ... No SQL statements were provided` na primeira
+  leitura pós-recreate — mesmo COM SQL válido testado momentos antes via API direta. Não assumido
+  como definitivo: aguardado mais um ciclo de avaliação e reconfirmado via API — erro sumiu sozinho
+  (conexão FlightSQL "esquentando" logo após o recreate do Grafana, não um bug real de query).
+  6/6 `health: ok` na checagem seguinte.
+- **Resultado final (2 checagens, API real)**: 8 alertas Prometheus (artists-booking+Loki) `Normal`,
+  6/6 rastafinancas `health: ok` (1 pending, 1 legitimamente firing por achado real — ver abaixo),
+  3/15 microgrow saudáveis (`api-down`, `api-latency` Normal; `mqtt-broker-down` `nodata`, não
+  error — tópico `$SYS/broker/clients/connected` parou de publicar há ~2h enquanto outros tópicos
+  `$SYS` continuam atualizando, achado registrado não investigado, fora de escopo), 12/15 microgrow
+  seguem `error`/`firing` por tabela ausente — não corrigível por tradução de query, depende do
+  simulador voltar a escrever (gap pré-existente e já registrado, D-2026-09-15-3).
+- **2 achados de design pré-existente, preservados fielmente (não corrigidos, fora do pedido
+  "traduzir Flux→SQL")**: (1) `rasta-import-errors` conta AMOSTRAS de scrape (~60 em 15min, sempre
+  > 3), não falhas reais — mesmo comportamento do Flux original, sempre vai disparar
+  independente de erro real de import; (2) 12 alertas microgrow vão continuar `Alerting` (erro)
+  assim que o SMTP for ativado, até o simulador voltar — mesmo comportamento de antes (Flux também
+  daria erro contra o backend v3), não é regressão desta tradução.
+- Status: DONE (21/21 queries traduzidas e verificadas via gate externo real, 2 achados de design
+  pré-existente registrados, não corrigidos).
+
+## Follow-up: rasta-import-errors corrigido (métrica errada) + microgrow simulador (achado real) — 2026-09-17
+- `rasta-import-errors`: achado real ao ler `apps/api/src/plugins/product-metrics.ts` do
+  rastafinancas — a query original (tradução literal do Flux) contava AMOSTRAS de scrape de
+  `rasta_import_transactions_total` (contador de throughput, sem relação com falha) em vez de usar
+  a métrica que já existe corretamente instrumentada no código pra isso:
+  `rasta_import_batch_total{format,status}`. Corrigido pra
+  `COALESCE(MAX(counter)-MIN(counter),0) FROM rasta_import_batch_total WHERE status='error'`
+  (increase real do contador no período, não contagem de amostras). Não é bug de instrumentação —
+  não precisou do harness-dev. Verificado: sintaxe SQL válida (erro atual é `table not found`,
+  mesma classe do gap do microgrow — a métrica tem `labelNames` e só ganha série quando um import
+  real acontecer pelo menos uma vez; nenhum ocorreu neste ambiente ainda). Vai resolver sozinho
+  assim que o produto processar um import de verdade.
+- **"Religar o simulador do microgrow"**: `POST /api/v1/simulator/control {"action":"play",
+  "scenario":"normal_day"}` executado, `GET /api/v1/simulator/status` confirmou `running: true`.
+  MAS achado real ao investigar por que os dados não apareciam mesmo assim: sniff MQTT ao vivo
+  (`mosquitto_sub -t 'microgrow/#'`) confirmou que o simulador publica dado real e válido, só que
+  em `microgrow/sim/tele/...`/`microgrow/sim/stat/...` — o Telegraf (`microgrow/infra/telegraf/
+  telegraf.conf`) só escreve em `microgrow/tele/...`/`microgrow/stat/...` (sem o segmento `/sim`),
+  então nunca recebe nada, independente do estado play/pause (que é só uma flag interna da
+  `microgrow-api`, não controla o processo real do simulador — o container roda `run.py`
+  diretamente, não o `daemon.py` que ouviria esse comando). Bug real de código, confirmado com
+  `_SIM_PREFIX = "microgrow/sim"` em `simulator/publishers/mqtt_publisher.py`, e com
+  `test_publisher.py` testando esse prefixo deliberadamente (não é typo, é uma divergência de
+  design nunca reconciliada com o `telegraf.conf` do mesmo repo). Fora do escopo do harness-infra
+  (código de produto) — delegado ao `harness-dev` (Agent tool, sessão em background no repo
+  `microgrow`) com o diagnóstico completo, rodando no momento deste registro.
+- Status: rasta-import-errors DONE (verificado, aguardando evento real). Simulador: ação pedida
+  (religar) executada, mas objetivo real (dado fluindo) BLOQUEADO por bug de produto — delegado,
+  IN_PROGRESS no harness-dev.
+
+## Fechamento: filtro source='sim' aplicado + verificação final de todas as regras — 2026-09-17
+- harness-dev confirmou (repo `microgrow`, sessão delegada): Telegraf agora tagueia
+  `soil_moisture`/`air_conditions`/`reservoir` com `source=real|sim` (6 blocos `/sim` espelhados +
+  tag nos blocos reais correspondentes); `pump_events` usa `mqtt_source` (nome já ocupado por
+  `source` dinâmico pré-existente); `hydric_score`/`reservoir_drain_event` deliberadamente sem tag
+  (fonte única, já isolada no nível da API). B1 aplicado (PUT .../config/data-source sim) +
+  persistido via `start.sh`. Testes: simulator 68/68, api jest 296/296, sem regressão.
+- **Achado novo registrado pelo harness-dev, não corrigido (fora do escopo delegado)**:
+  `pump_events` não grava no InfluxDB mesmo com MQTT confirmando entrega — causa raiz não
+  encontrada após ~10 variantes de config testadas, excedeu o limite de 3 retries e escalou
+  corretamente em vez de continuar gastando a sessão. Ver `microgrow/.specs/project/DECISIONS.md`
+  pro trail completo de eliminação.
+- Verificado de forma independente (não confiei só no relato do agente): query direta na API do
+  InfluxDB confirmou `soil_moisture`/`air_conditions`/`reservoir`/`hydric_score` com dado fresco
+  (`2026-09-18T00:08...`) e tag `source=sim` correta nas 3 medições tagueadas;
+  `reservoir_drain_event` também já tinha 1 evento real; `lights_compliance`/`irrigation_outcome`/
+  `grow_cycle` continuam sem tabela — event-driven, ainda não dispararam, não é bug.
+- 7 queries de alerta atualizadas (`microgrow.yaml`) com filtro `source = 'sim'` (as que leem
+  `soil_moisture`/`air_conditions`/`reservoir`) — mantém a promessa de isolamento real/sim também
+  do lado do `infra-platform`. Testadas direto contra o InfluxDB real antes de aplicar (5/5 valores
+  sensatos retornados). `docker compose up -d --force-recreate grafana`, 2 ciclos de avaliação
+  esperados, verificado via API.
+- **Resultado final (API real, gate externo)**: 29 regras totais — 22 `inactive`(saudável), 2
+  `pending` (normal, aguardando `for`), 5 `firing` — todas as 5 explicadas e legítimas: 3 microgrow
+  (tabela event-driven ainda não populada), `rasta-import-errors` (aguardando 1º import real, já
+  documentado), `rasta-notif-job-down` (sinal real: nenhum job de notificação rodou nas últimas 2h,
+  não é bug de config). Zero erro inexplicado, zero falso positivo do bug antigo de
+  `classic_conditions`, zero mismatch Flux/SQL restante nas medições com dado disponível.
+- `docker compose config` PASS, 12/12 platform + 7/7 microgrow containers `Up`/saudáveis.
+- Status: DONE. Toda a cadeia do incidente (D-2026-09-17-1 a 6) fechada e verificada.
+
+## Loop autônomo (dentro da sessão, sem sandbox): pump_events resolvido — 2026-09-18
+Usuário pediu loop de correção contínua nesta mesma sessão (sem as pré-condições de autonomia
+completa — sandbox/--remote-control/spec fechado — por isso mantido como loop supervisionado,
+registrando dúvidas em vez de agir sem critério em itens de decisão de negócio).
+- Investigação direta (não estava resolvido pelo harness-dev anterior, que tinha excedido o limite
+  de retries): usado um harness Telegraf descartável (container `telegraf:1.40.0` isolado, config
+  mínima, `outputs.file`, `debug=true`) pra isolar a causa raiz real — comparação lado a lado
+  (tópico do pump vs tópico do soil, mesmo processo) confirmou que SÓ o pump falha. Teste
+  controlado com `mosquitto_pub` de payloads sintéticos (`{"active":false,"count":5}` vs
+  `{"active":false,"source":"auto"}`) confirmou: o parser `json` clássico do Telegraf 1.40.0
+  descarta campos não-numéricos (bool/string) não reivindicados por `tag_keys` SEM logar erro —
+  se sobra zero fields após a extração de tags, a métrica inteira é descartada em silêncio. O
+  payload do pump (`active` bool + `source`/`simulated` já viram tags) sempre resultava em zero
+  fields.
+- Fix testado isoladamente antes de aplicar: `data_format = "json_v2"` com `active` declarado
+  explicitamente como field tipo `bool` — confirmado gerando métrica válida a cada ciclo.
+- Delegado ao harness-dev (repo `microgrow`, fix já testado e pronto, só aplicar+verificar+
+  registrar) — aplicado nos 2 blocos (`real` + `sim`), `--force-recreate`, testes 68/68 + 296/296
+  sem regressão. Verificado de forma independente por mim: `pump_events` com dado real e fresco,
+  `mqtt_source=sim`, todos os campos populados.
+- Status: DONE. Nenhum alerta em `infra-platform` referencia `pump_events` ainda — nada a
+  atualizar aqui.
+
+## Loop autônomo: auditoria de tipo (tag vs field) nas 27 queries + 2 bugs reais achados — 2026-09-18
+Continuando o loop de correção, depois de resolver `pump_events`: auditei sistematicamente as 27
+queries SQL traduzidas contra `information_schema.columns` real do InfluxDB 3 (não assumido),
+procurando a mesma classe de erro que causou o bug do `pump_events` (mismatch entre o que o
+Telegraf grava — tag string vs field numérico/boolean — e o que a query espera).
+**2 bugs reais achados e corrigidos (falso-negativo silencioso, não erro — pior que os anteriores,
+porque o alerta parece saudável mas nunca dispararia mesmo com o evento real acontecendo)**:
+- `alert-reservoir-sensor-suspect`: `sensor_suspect` é tag (`Dictionary(Int32,Utf8)`, string
+  "true"/"false" confirmado com dado real). Query comparava `= 1.0` (nunca bate com string,
+  DataFusion não erra, só retorna 0 sempre). Corrigido pra `= 'true'`.
+- `alert-irrigation-ineffective`: `effective` (irrigation_outcome) é tag pelo mesmo motivo
+  (`tag_keys` no telegraf.conf). Query comparava `= false` (boolean literal). Corrigido pra
+  `= 'false'`.
+**1 achado de config, mesma classe do pump_events, delegado**: `compliant` (lights_compliance) é
+boolean NÃO-taggeado — vai ser descartado silenciosamente pelo parser `json` clássico do Telegraf
+assim que a tabela existir (mesma causa raiz do pump_events). Query SQL já corrigida pra
+`compliant = false` (comparação booleana correta, assumindo o fix de config aplicado). Fix de
+config (`json_v2`) delegado ao harness-dev (repo `microgrow`), rodando em background.
+**Demais 24 queries auditadas, sem problema encontrado**: tipos de coluna reais (`result_code`
+Int64, `status_code`/`decision`/`probe` Utf8, `counter`/`score`/`vwc_pct`/`level_pct` Float64)
+todos batendo com o tipo de comparação usado nas queries — confirmado via
+`information_schema.columns`, não assumido.
+Status: DONE (2 fixes aplicados e re-provisionados; 1 delegado, aguardando harness-dev).
+
+## Loop autônomo: fechamento — lights_compliance corrigido, estado final 22/29 saudáveis — 2026-09-18
+harness-dev aplicou e verificou o fix de `lights_compliance` (mesmo padrão `json_v2` do
+pump_events). Confirmado por mim de forma independente: `compliant` populado corretamente
+(true/false) em dado real via teste de repro do harness-dev.
+**Estado final da stack inteira (29 regras, API real, 2 ciclos de avaliação)**: 22 `inactive`
+(saudável), 3 `pending` (transitório normal — reservoir-sensor-stuck ainda acumulando janela de 2h,
+mqtt-broker-down em transição, light-schedule-violation pegou o dado de teste do harness-dev e vai
+limpar sozinho), 4 `firing` — todos explicados: `irrigation_outcome`/`grow_cycle`/
+`rasta_import_batch_total` aguardando 1º evento real (não é bug), `rasta-notif-job-down` com sinal
+real (nenhum job rodou em 2h).
+`docker compose config` PASS, 12/12 platform + 7/7 microgrow containers `Up`/saudáveis.
+**Loop autônomo (sem sandbox, supervisionado) encerrado**: convergiu — não há mais nenhum item
+acionável sem (a) conta externa (Resend) ou (b) decisão de produto (configurar ciclo de cultivo).
+Ambos registrados como perguntas pro usuário, não resolvidos unilateralmente.
+Status: DONE.
+
+## Loop autônomo: grow cycle configurado + bug real de permissão/persistência achado e corrigido — 2026-09-18
+Usuário respondeu a dúvida pendente ("comece sempre no primeiro ciclo") — configurei o ciclo de
+cultivo do microgrow via `PUT /api/v1/config/grow-cycle` (stage=seedling, started_at=hoje,
+duração=129d, mesmos defaults do código). Primeira vez que esse código path é exercitado.
+**Bug real achado (nunca exercitado antes, 3 causas raiz)**:
+1. `api/Dockerfile`: `/app/data` nunca criado/chowned pro `appuser` antes do `USER appuser` —
+   `EACCES: permission denied, mkdir '/app/data'`, 500 real.
+2. `infra/docker-compose.yml`: serviço `api` sem NENHUM volume — mesmo corrigindo a permissão,
+   `cycles.json` sumiria a cada `--force-recreate` (usado várias vezes nesta sessão).
+3. Achado pelo próprio harness-dev durante a verificação: `GrowCycleService` nunca rehidratava o
+   estado em memória a partir do `CycleStore` no boot — `GET` retornava 404 mesmo com o arquivo
+   correto em disco.
+Delegado ao harness-dev, 3 causas corrigidas (Dockerfile mkdir+chown, volume nomeado `api_data`,
+rehidratação com TDD real — RED confirmado antes do fix). Verificado por mim de forma
+independente: `GET /api/v1/config/grow-cycle` retorna o ciclo real, `grow_cycle` no InfluxDB com
+dado fresco.
+**Resultado final da stack de alertas**: 25/29 saudáveis (era 22/29). Restam 4 firing, todos
+explicados: `irrigation_outcome`/`rasta_import_batch_total` aguardando 1º evento real (não é
+bug), `rasta-notif-job-down` (sinal real, nenhum job rodou em 2h), `reservoir-sensor-flat-line`
+(sinal real — reservatório do simulador genuinamente estável/sem variação há mais de 2h, não é
+bug de query).
+Status: DONE.
+
+## Continuação do loop (a pedido do usuário): 5 bugs reais em dashboards + achado de design registrado — 2026-09-18
+Investigação do alerta `reservoir-sensor-flat-line`: confirmado via dado real (`hydric_score.
+next_irrigation_est_h ~25h`) que o próprio sistema espera ~1 irrigação por dia — um alerta de
+"reservatório parado > 2h" vai disparar quase o tempo todo em operação normal. Achado de DESIGN
+(threshold mal calibrado pro comportamento real do produto), não bug técnico — registrado, não
+corrigido sem decisão do usuário.
+Varredura de todos os 76 `rawSql` dos dashboards (`microgrow`+`rastafinancas`) atrás da mesma
+classe de bug já achada nos alertas (tag vs field, nome de métrica errado): **5 bugs reais
+confirmados** em `rasta-auth-security.json`/`rasta-product.json` — nomes de measurement que
+NUNCA existiram no produto (`rasta_auth_logins_total`, `rasta_auth_token_refreshes_total`,
+`rasta_auth_password_resets_total`, `rasta_import_batches_total`, `rasta_import_errors_total`),
+confirmado contra `product-metrics.ts` real e `information_schema.tables` do InfluxDB. Mesma
+classe de bug já documentada como "corrigida" em D-2026-09-15-3 (item Categoria B) — na prática
+não estava corrigida nestes 2 dashboards (a migração Flux→SQL de 15/09 aparentemente traduziu a
+versão desatualizada das queries, não a corrigida).
+5 queries corrigidas pros nomes reais (`rasta_user_logins_total`, `rasta_token_refresh_total`,
+`rasta_password_reset_total`, `rasta_import_batch_total` singular, + `status='error'` filter pro
+painel de erro de import — mesmo padrão já aplicado no alerta). Testadas contra o InfluxDB real
+antes de aplicar: 1/5 com dado real confirmado (`rasta_user_logins_total`, taxa de sucesso
+90.9% calculada certa), 4/5 com "table not found" esperado (aguardando 1º evento real —
+`rasta_token_refresh_total`/`rasta_password_reset_total`/`rasta_import_batch_total` nunca
+incrementados neste ambiente ainda, mesma classe já vista nos alertas).
+Verificado que o Grafana recarrega dashboards de arquivo sozinho (`updateIntervalSeconds: 30`,
+sem precisar de `--force-recreate`) — confirmado via API real (`GET /api/dashboards/uid/...`)
+que as queries corrigidas já estão ao vivo.
+Demais 71 queries (dos 76) auditadas quanto a nome de measurement — nenhum outro erro de nome
+encontrado.
+Status: DONE (5 bugs corrigidos e verificados; achado de design do alerta do reservatório
+registrado, aguardando decisão).
