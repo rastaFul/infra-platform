@@ -101,6 +101,27 @@ do `package-lock.json`. Não investigado a fundo (fora do escopo de infra-platfo
 spec própria no `harness-dev` do rastafinancas pra triagem (quais são realmente exploráveis nesse
 contexto vs. falso-positivo de dependência transitiva não usada em runtime) e correção.
 
+## Docker disk lifecycle — DONE (2026-09-21, exceto compactação — deliberadamente manual)
+
+C: (Windows/WSL2 host) foi a 9.1GB livres/477GB por causa do `docker_data.vhdx` (backend WSL2 do
+Docker Desktop) nunca compactado. Mitigado (D-2026-09-21-1) + automatizado via spec
+`.specs/features/docker-disk-lifecycle/spec.md`:
+- [x] Prune automático diário (`docker builder prune -af` + `docker image prune -f`) —
+  `scripts/docker-disk-guard.sh`, cron `35 3 * * *`
+- [x] Checagem periódica (tamanho do `.vhdx` + espaço livre em C:) com WARN em
+  `~/logs/docker-disk-guard.log` antes de virar incidente — cron local (D2), não Prometheus
+  (sem exporter de métricas de host Windows nesta stack, decisão deliberada de não adicionar só
+  por isso, ver spec)
+- [x] Flag (não deleção automática) de imagens `*-rollback`/`*-pre-*` com mais de 14 dias — decisão
+  de apagar continua sempre humana (D5)
+- [x] Decisão D4: compactação do `.vhdx` fica manual/sob demanda, não automatizada — exige Admin,
+  provou-se não-confiável de automatizar sem supervisão (lock de arquivo persistente achado ao
+  vivo em 2026-09-21), e parar o Docker Desktop desatendido derrubaria os containers sem aviso.
+  Runbook: `docs/how-to/docker-disk-cleanup.md`.
+
+Possível upgrade futuro, não bloqueante: exporter de métricas de host Windows/WSL2 (`node_exporter`/
+`windows_exporter`) pra levar isso pro Grafana em vez de só log — fora de escopo desta spec.
+
 ## Fase 2+ — AWS (`aws-prod`) — NOT STARTED
 
 Só quando houver receita/escala que justifique. Mesmas imagens, mesmo pipeline — troca de destino, não reescrita.
