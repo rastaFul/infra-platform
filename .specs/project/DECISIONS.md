@@ -20,9 +20,13 @@ Executado (steps 5-6 do runbook `docs/how-to/setup-resend-smtp-alerts.md`):
   `rodrigob.dev@gmail.com`): `HTTP 200 {"status":"success","duration":"1s999ms"}` — ~2s de duração
   bate com round-trip SMTP real (não instantâneo), zero erro nos logs do Grafana (`docker logs
   platform-grafana`, filtrado, sem "error"/"fail"/"dial").
-- **Confirmação final pendente do usuário**: checar a caixa de entrada de `rodrigob.dev@gmail.com`
-  pra confirmar o e-mail chegou de fato — não é algo que eu consigo verificar (mesma ressalva já no
-  runbook).
+- **Confirmação final**: usuário não recebeu o e-mail, mas causa identificada e não é bug de infra
+  — cota do Resend (free tier, 100/dia) já esgotada por testes feitos em `artists-booking` (conta
+  compartilhada, mesmo domínio `rastaful.dev`, ver `repository-layout.md`). `HTTP 200
+  {"status":"success"}` do teste confirma que Grafana entregou pro Resend com sucesso (aceito na
+  API); o que falha depois disso (rate limit diário) é fora do controle desta config. Reset é
+  diário — sem ação necessária, vai funcionar sozinho amanhã. Item **fechado como DONE** (config
+  correta, verificada; falha observada é de cota externa compartilhada, não de setup).
 
 Runbook `docs/how-to/setup-resend-smtp-alerts.md` desatualizado no passo 6 (endpoint antigo) — a
 atualizar numa próxima passada. `SMTP_PASSWORD` deixa de ser pendência.

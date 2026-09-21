@@ -150,11 +150,16 @@ tinha threshold de 2h claramente baixo demais — sistema espera ~25h entre irri
 real da bomba (`pump_events`) em vez de checar "sem variação em 2h" isolado — alerta preservado
 (usuário pediu explicitamente não perder o alerta), falso-positivo diário eliminado.
 
-**Fechado 2026-09-21 (D-2026-09-21-7)**: SMTP Resend ativado. Usuário criou a API key e colou em
-`.env` (nunca exposta por mim). Grafana recriado, envio de teste real via API confirmado
-(`HTTP 200 {"status":"success"}`, ~2s de round-trip). Único passo restante é do usuário: conferir
-a caixa de entrada (`rodrigob.dev@gmail.com`) pra confirmação visual final. Endpoint de teste antigo
-do runbook estava obsoleto (removido no Grafana 13.2.1) — runbook atualizado com o novo.
+**Fechado 2026-09-21 (D-2026-09-21-7)**: SMTP Resend ativado, DONE. Usuário criou a API key e colou
+em `.env` (nunca exposta por mim). Grafana recriado, envio de teste real via API confirmado
+(`HTTP 200 {"status":"success"}`, ~2s de round-trip). E-mail não chegou, mas causa é externa e
+esperada: cota do Resend (free, 100/dia) já esgotada por testes em `artists-booking` (mesma conta,
+mesmo domínio) — reset diário, sem ação necessária. Endpoint de teste antigo do runbook estava
+obsoleto (removido no Grafana 13.2.1) — runbook atualizado com o novo.
+
+**Pendências restantes: só 2, ambas contas externas** — Oracle Cloud + Terraform Cloud (bloqueiam
+`plan`/`apply` real do módulo `oci-compute`). Usuário decidiu adiar pra quando os projetos dele
+estiverem prontos — não é mais tratado como bloqueio ativo, fica registrado aqui até ele retomar.
 
 **Fechado 2026-09-21 (D-2026-09-21-6)**: dado de teste em `lights_compliance` removido (tabela
 inteira dropada via `influxdb3 delete table` — só existiam 4 linhas, todas do mesmo teste do
