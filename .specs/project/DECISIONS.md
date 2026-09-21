@@ -1,5 +1,44 @@
 # DECISIONS
 
+## D-2026-09-21-4: alert-reservoir-sensor-stuck (microgrow) — threshold corrigido, alerta preservado
+Usuário: "eu não quero perder o alerta, então faça a correção" — em resposta ao achado registrado
+em D-2026-09-18-3 (threshold de 2h não bate com a cadência real de ~25h entre irrigações).
+
+Causa raiz real (não suposição): a query original checava `STDDEV(level_pct) < 0.1` nas últimas
+2h, sem olhar se a bomba tinha rodado nesse intervalo. Nível parado é o comportamento NORMAL
+durante as ~23h em que a bomba está desligada (cooldown real ~25h, não as 4h configuradas em
+`cooldownHours` — outros fatores da lógica de decisão esticam o intervalo) — ou seja, o alerta
+disparava (ou disparava e o `for: 2h` mascarava, dependendo da hora do dia) todo santo dia fora do
+evento real que deveria detectar (sensor travado DURANTE uma irrigação real).
+
+**Fix**: query reescrita pra só avaliar `STDDEV(level_pct)` na janela de 2h logo após a última
+ativação real da bomba (`pump_events.active=true AND mqtt_source='sim'`, mesmo tag de isolamento
+sim/real usado desde D-2026-09-17-7). Sem pump event recente (janela de 2h-3h atrás), a query
+retorna NULL — alerta fica Normal/NoData, nunca falso-positivo. `for: 2h` → `for: 0m` (a janela de
+2h já está embutida na query, não precisa mais do `for` fazer esse trabalho). uid preservado
+(`alert-reservoir-sensor-stuck`) — mesmo alerta, não um novo.
+
+**Verificado externamente, não assumido**:
+- Sintaxe SQL (CTE + subquery escalar) testada direto contra o InfluxDB3/DataFusion real via
+  `docker exec platform-influxdb3 curl .../query_sql` antes de aplicar — schema de `pump_events`
+  (`active` Boolean, `mqtt_source` sim/real) e `reservoir` (`level_pct`, `source` sim) confirmados
+  via `information_schema.columns` real, não suposição de nome de coluna.
+- Reload real do Grafana (`POST /api/admin/provisioning/alerting/reload`, HTTP 200, "Alerting
+  config reloaded") — não bastou editar o YAML, confirmado que a engine pegou a mudança.
+- Regra confirmada recarregada via `GET /api/v1/provisioning/alert-rules/alert-reservoir-sensor-stuck`
+  (título novo, `for: 0s`, rawSql novo presentes).
+- Estado de execução ao vivo via `GET /api/prometheus/grafana/api/v1/rules`: `health: ok`,
+  `lastError: None` — a engine rodou a query nova de verdade contra o InfluxDB3 real sem erro.
+- Achado colateral do teste: só existe 1 `pump_event` com `active=true` desde sempre nesta base
+  (`source=manual`, 2026-09-18) — condizente com o simulador do microgrow estar pausado, já
+  registrado antes (D-2026-09-15-3). Não foi possível confirmar o disparo positivo real (precisa de
+  um pump event `mqtt_source='sim'` recente pra isso) — a lógica foi validada por sintaxe real +
+  ausência de erro de execução, não por um disparo real ainda. Ficará provado na próxima vez que o
+  simulador rodar e a bomba ativar de verdade.
+
+Arquivo: `platform/grafana/provisioning/alerting/microgrow.yaml`. Achado registrado em D-2026-09-18-3
+fechado.
+
 ## D-2026-09-21-1: docker-disk-cleanup — limpeza executada, compactação do VHDX bloqueada (achado real de ambiente)
 Usuário reportou disco C: cheio (9.1GB livres/477GB). Diagnóstico real (não assumido): Docker
 Desktop estava parado; religado, `docker system df` confirmou causa raiz —

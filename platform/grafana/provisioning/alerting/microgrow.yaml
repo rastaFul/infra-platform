@@ -380,19 +380,30 @@ groups:
     interval: 2m
     rules:
       - uid: alert-reservoir-sensor-stuck
-        title: "Reservatório — Sensor Flat Line > 2h"
+        title: "Reservatório — Sensor Não Reagiu à Irrigação"
         condition: C
-        for: 2h
+        for: 0m
         labels:
           severity: critical
           component: reservoir
         annotations:
-          summary: "Nível do reservatório não variou em 2h com bomba ativa"
+          summary: "Nível do reservatório não variou nas 2h após uma ativação real da bomba"
           description: "Verificar: cabo do sensor, posição do flutuador, entupimento."
         data:
+          # Fix 2026-09-21 (achado registrado em D-2026-09-18-3, agora corrigido): a versão
+          # anterior desta query checava só "STDDEV(level_pct) < 0.1 nas últimas 2h", sem olhar
+          # se a bomba rodou nesse intervalo -- ou seja, disparava TODO dia durante os ~23h
+          # normais entre irrigações reais (cadência real observada ~25h, não 2h), porque nível
+          # parado sem bomba rodando é o comportamento ESPERADO, não uma falha de sensor. A nova
+          # versão só avalia STDDEV(level_pct) na janela de 2h logo APÓS a última ativação real
+          # da bomba (`pump_events.active=true`, mesmo tag `mqtt_source='sim'` usado pra isolar
+          # real/sim desde D-2026-09-17-7) -- sem pump event recente (janela de 2h-3h atrás), a
+          # query retorna NULL e o alerta fica Normal/NoData, nunca falso-positivo. Sintaxe
+          # (CTE + subquery escalar) testada ao vivo contra o InfluxDB3/DataFusion real antes de
+          # aplicar (`docker exec platform-influxdb3 curl .../query_sql`), não assumida.
           - refId: A
             relativeTimeRange:
-              from: 7200
+              from: 10800
               to: 0
             datasourceUid: influxdb-microgrow
             model:
@@ -400,8 +411,16 @@ groups:
               maxDataPoints: 43200
               refId: A
               rawSql: |
-                SELECT STDDEV(level_pct) AS value FROM reservoir
-                WHERE source = 'sim' AND time >= now() - INTERVAL '2 hours'
+                WITH last_pump AS (
+                  SELECT MAX(time) AS pump_time FROM pump_events
+                  WHERE active = true AND mqtt_source = 'sim'
+                )
+                SELECT STDDEV(r.level_pct) AS value FROM reservoir r
+                WHERE r.source = 'sim'
+                  AND r.time >= (SELECT pump_time FROM last_pump)
+                  AND r.time <= (SELECT pump_time FROM last_pump) + INTERVAL '2 hours'
+                  AND (SELECT pump_time FROM last_pump)
+                    BETWEEN now() - INTERVAL '3 hours' AND now() - INTERVAL '2 hours'
               format: table
           - refId: C
             datasourceUid: "__expr__"

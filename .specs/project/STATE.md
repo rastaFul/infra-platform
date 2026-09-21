@@ -144,16 +144,17 @@ de bug que D-2026-09-15-3 achou nos alertas em setembro, nunca corrigida de fato
 dashboards específicos (a migração Flux→SQL de 15/09 não pegou). Corrigido e verificado (1/5 com
 dado real, 4/5 aguardando 1º evento, mesmo padrão já visto). Grafana recarrega dashboard sozinho,
 confirmado ao vivo via API. Ver D-2026-09-18-3.
-Também investigado (não corrigido, é design não bug): `alert-reservoir-sensor-flat-line` tem
-threshold de 2h claramente baixo demais — sistema espera ~25h entre irrigações reais.
+Também investigado (não corrigido nesta rodada, é design não bug): `alert-reservoir-sensor-stuck`
+tinha threshold de 2h claramente baixo demais — sistema espera ~25h entre irrigações reais.
+**Corrigido em 2026-09-21, ver D-2026-09-21-4**: query reescrita pra correlacionar com ativação
+real da bomba (`pump_events`) em vez de checar "sem variação em 2h" isolado — alerta preservado
+(usuário pediu explicitamente não perder o alerta), falso-positivo diário eliminado.
 
 **Pendências que dependem de ação SUA, não do agente**:
 1. Ativar SMTP de verdade: criar conta Resend + verificar domínio `rastaful.dev` + gerar API key
    (`docs/how-to/setup-resend-smtp-alerts.md`), colar em `platform/.env` (`SMTP_PASSWORD`).
 2. Dado de teste do harness-dev ficou em `lights_compliance` (`light_id` "flower-live-true/false",
    usado pra provar o fix) — cosmético, sem risco, avisar se quiser que eu limpe.
-3. `alert-reservoir-sensor-flat-line`: threshold de 2h não bate com a cadência real (~25h) — decidir
-   novo threshold, combinar com `cooldown_remaining_h`, ou desativar.
 - current task: nenhuma pendente de execução do harness-infra.
 
 ## Session: infra-full-upgrade-2026-09-followups

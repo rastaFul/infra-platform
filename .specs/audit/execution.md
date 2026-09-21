@@ -1362,3 +1362,18 @@ registrado, aguardando decisão).
 - shellcheck: PASS (docker-disk-guard.sh)
 - yaml/json syntax: PASS
 - Status: DONE
+
+## Task: alert-reservoir-sensor-stuck threshold fix (microgrow) — 2026-09-21
+- Achado: query original disparava falso-positivo diário (checava "sem variação em 2h" sem
+  correlacionar com ativação real da bomba; cadência real de irrigação ~25h, não 2h).
+- Fix: rawSql reescrito com CTE (`pump_events.active=true AND mqtt_source='sim'`) + subquery
+  escalar, avaliando STDDEV(level_pct) só na janela de 2h pós-ativação real da bomba. `for: 2h`
+  -> `for: 0m`. uid preservado (mesmo alerta, não recriado).
+- yaml syntax: PASS (python3 yaml.safe_load)
+- SQL syntax: testado ao vivo contra InfluxDB3/DataFusion real (`platform-influxdb3`), sem erro
+- Grafana provisioning reload: PASS (HTTP 200, "Alerting config reloaded")
+- Regra recarregada confirmada via API (título/for/rawSql novos presentes)
+- Execução ao vivo: health=ok, lastError=None (GET /api/prometheus/grafana/api/v1/rules)
+- Limitação registrada: sem pump event `mqtt_source=sim` recente na base (simulador pausado),
+  disparo positivo real não pôde ser confirmado nesta rodada — só ausência de erro de execução.
+- Status: DONE
