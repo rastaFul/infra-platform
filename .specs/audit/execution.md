@@ -1377,3 +1377,13 @@ registrado, aguardando decisão).
 - Limitação registrada: sem pump event `mqtt_source=sim` recente na base (simulador pausado),
   disparo positivo real não pôde ser confirmado nesta rodada — só ausência de erro de execução.
 - Status: DONE
+
+## Task: verificar rename master->main em developerFolio/tldr-projects — 2026-09-21
+- developerFolio: git fetch --prune (remoto master deletado, confirmado), git ls-remote --heads
+  (main/gh-pages/feature/* only), grep -rn master .github/workflows/ = 0 matches, origin/HEAD ->
+  origin/main. STATE.md do repo confirma feature rename-branch-master-main CONCLUÍDO, commit
+  de2d176.
+- tldr-projects: git remote -v vazio (sem remote), git branch -a só lista main, git reflog show
+  main confirma "Branch: renamed refs/heads/master to refs/heads/main" na raiz do histórico real,
+  sem commit órfão sobrando.
+- ADR-013 atualizado (tabela + seção de fechamento). Status: DONE.

@@ -558,7 +558,11 @@ diretórios em `~/projects/`:
 - `url-shortener`: fora de escopo (owner é `thiagomr`, não `rastaFul`).
 - `cron-monitoring`/`gorila`/`logger-lib`: não são repos git.
 Ver D-2026-09-08-{1,2} em DECISIONS.md, tabela completa em ADR-013, detalhe em execution.md.
-Próxima ação: usuário decidir developerFolio (renomear + editar os 2 workflows, ou deixar em master por ser fork) e tldr-projects (o que fazer com a branch `main` órfã antes de eu poder renomear `master`).
+
+**Fechado em 2026-09-21 (D-2026-09-21-5)**: usuário rodou `harness-dev` nos dois. `developerFolio`
+renomeado (commit `de2d176`, workflows corrigidos, `master` remoto deletado); `tldr-projects`
+renomeado (branch órfã resolvida, `git reflog` confirma). Ambos verificados externamente por mim.
+ADR-013 100% aplicado, nenhuma pendência de rename restante.
 
 ## Sessão 2026-09-02 — artists-booking Spec 54 T15 (dashboard novo, sem alerta) — DONE
 10 painéis novos em `platform/dashboards/artists-booking/product-health.json` (RUM: navegação,

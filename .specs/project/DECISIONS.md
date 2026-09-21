@@ -1,5 +1,26 @@
 # DECISIONS
 
+## D-2026-09-21-5: developerFolio + tldr-projects renomeados master→main — ADR-013 fechado
+Usuário rodou `harness-dev` em cada um dos 2 repos escalados desde D-2026-09-08-{1,2}/ADR-013.
+Verificado externamente por mim (não tomado por palavra), repo a repo:
+
+- **developerFolio**: `.specs/project/STATE.md` do repo confirma feature
+  `rename-branch-master-main` CONCLUÍDA (decisão do usuário: opção b, alinhar deploy pra
+  `-b gh-pages`), commit `de2d176` ("chore: atualizar CI/scripts para branch main"), pushed.
+  Confirmado ao vivo: `git fetch --prune` removeu a ref local órfã de `origin/master` (já deletada
+  no remoto), `git ls-remote --heads origin` só lista `main`/`gh-pages`/`feature/profile*`,
+  `origin/HEAD -> origin/main`, `grep -rn master .github/workflows/` = 0 ocorrências (os 2
+  workflows que citavam `master` por nome foram corrigidos).
+- **tldr-projects**: sem spec própria registrando o rename (repo não tem remote configurado,
+  `git remote -v` vazio — provavelmente tratado como ação direta, não spec formal), mas
+  confirmado por evidência externa real: `git reflog show main` mostra
+  `Branch: renamed refs/heads/master to refs/heads/main` na raiz do histórico, sem sobra do commit
+  órfão "first commit" que bloqueava o `git branch -m` em 2026-09-08. `git branch -a` só lista
+  `main` agora.
+
+ADR-013 atualizado (tabela + seção de fechamento) — varredura de 2026-09-08 está 100% aplicada em
+todos os repos `rastaFul`. Nenhuma pendência de rename de branch restante.
+
 ## D-2026-09-21-4: alert-reservoir-sensor-stuck (microgrow) — threshold corrigido, alerta preservado
 Usuário: "eu não quero perder o alerta, então faça a correção" — em resposta ao achado registrado
 em D-2026-09-18-3 (threshold de 2h não bate com a cadência real de ~25h entre irrigações).

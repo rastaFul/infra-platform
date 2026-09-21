@@ -24,8 +24,8 @@ pra `main` ao encontrar.
 | `rastafinancas` | rastaFul | `main` | Já conforme, nada a fazer |
 | `vetcare` | rastaFul | `main` | Já conforme, nada a fazer |
 | `agents-harness` | rastaFul | `main` | Já conforme, nada a fazer |
-| `developerFolio` | rastaFul (fork público) | `master` | **Não renomeado** — fork ativo com `gh-pages` + 2 branches de feature, 2 workflows (`deploy.yml`, `prettier.yml`) referenciam `master` por nome, deploy real de site público. Rename exige editar os workflows junto (não é só metadado) — escalado ao usuário antes de agir. |
-| `tldr-projects` | sem remote | `master` | **Não renomeado** — anomalia encontrada: já existe uma branch `main` local órfã (1 commit "first commit", histórico não relacionado ao trabalho real em `master`) + ref remota `origin/main` órfã sem remote configurado (`git remote -v` vazio). `git branch -m` falha (`main` já existe). Working tree com mudanças não commitadas de outra frente (reddit feature). Escalado ao usuário — decisão de descartar branch órfã não é do agente. |
+| `developerFolio` | rastaFul (fork público) | `master` | **Renomeado → `main` (2026-09-21, via `harness-dev`)**. Feature `rename-branch-master-main`, decisão do item 6 tomada pelo usuário: opção b, alinhar deploy pra `-b gh-pages`. `package.json`/`deploy.yml`/`prettier.yml` editados, branch renomeada no GitHub, `master` remoto deletado. Verificado externamente por `harness-infra`: `git ls-remote --heads origin` só lista `main`/`gh-pages`/`feature/*` (sem `master`), `git branch -a` sem refs de `master` após `fetch --prune`, `grep -rn master .github/workflows/` = 0 ocorrências, `origin/HEAD -> origin/main` confirmado. Commit `de2d176` ("chore: atualizar CI/scripts para branch main"), pushed. |
+| `tldr-projects` | sem remote | `master` | **Renomeado → `main` (via `harness-dev`)**. A branch `main` órfã que bloqueava o rename foi resolvida (não registrado em spec própria do repo, mas confirmado por evidência externa: `git reflog show main` mostra `Branch: renamed refs/heads/master to refs/heads/main` na raiz do histórico real, sem nenhum commit órfão "first commit" sobrando). Sem remote configurado neste repo (`git remote -v` vazio) — rename é só local, não há `origin/master` pra deletar nem CI pra atualizar. |
 | `url-shortener` | thiagomr (não é rastaFul) | `feature/pipelines` | Fora de escopo — repo de outro owner/colaboração, convenção deste workspace não se aplica sem confirmação. |
 | `cron-monitoring`, `gorila`, `logger-lib` | — | não são repos git | N/A |
 
@@ -47,3 +47,9 @@ não é mais um rename de 30 segundos.
   serem tocados — aceitável, não é retrabalho forçado só por isso.
 - Nenhuma mudança de CI necessária aqui: `infra-platform` não tinha workflow referenciando
   `master` por nome no momento da troca.
+
+## Fechamento — 2026-09-21
+Os 2 únicos repos escalados (`developerFolio`, `tldr-projects`) foram migrados pelo usuário via
+`harness-dev`. Varredura de 2026-09-08 está 100% aplicada — todo repo `rastaFul` sob `~/projects/`
+usa `main`. `url-shortener` (outro owner) e os não-repos-git seguem fora de escopo por decisão
+original, não pendência. Ver D-2026-09-21-5 em `.specs/project/DECISIONS.md`.
