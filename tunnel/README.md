@@ -43,6 +43,21 @@ Tunnel credentials remain at `~/.cloudflared/` (managed by cloudflared,
 cloudflared's own convention, never versioned) — bind-mounted read-only
 into the container by `docker-compose.yml`.
 
+## Reusing this compose for your own tunnel
+
+`cloudflared/config.yml`'s `tunnel:` field is a placeholder
+(`<TUNNEL_ID>`) — it is not a shared or reusable value. To stand this up
+for your own domain:
+
+1. `cloudflared tunnel login` and `cloudflared tunnel create <name>` to get
+   your own Tunnel ID and `creds.json`.
+2. Replace `<TUNNEL_ID>` in `cloudflared/config.yml` with the ID printed
+   above.
+3. Place the generated `creds.json` at `~/.cloudflared/` on the host (see
+   "Credentials" above) — it is never versioned in this repo.
+4. Update the `ingress` hostnames/ports in `cloudflared/config.yml` to
+   match your own services.
+
 ## Cloud Migration
 
 When moving to AWS:

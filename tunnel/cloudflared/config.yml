@@ -1,4 +1,6 @@
-tunnel: 4b4b58f0-7bcc-4d21-980d-1d853f661227
+tunnel: <TUNNEL_ID>
+# Placeholder — replace with your own Cloudflare Tunnel ID. See
+# ../README.md for how to obtain one.
 # Containerized (see ../docker-compose.yml) — mounted at this path inside
 # the cloudflared container, not the host path anymore.
 credentials-file: /etc/cloudflared/creds.json
