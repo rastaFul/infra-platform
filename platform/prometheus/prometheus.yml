@@ -18,6 +18,18 @@ scrape_configs:
         labels:
           source: collector-self-metrics
 
+  # Loki self-metrics — não existe HEALTHCHECK de Docker pra este serviço
+  # (imagem 3.7.7 sem shell/wget/curl desde 3.5.8, ver comentário no
+  # docker-compose.yml do platform). Monitoramento externo via Prometheus é
+  # o substituto: pega `up` (scrape falhando) e `process_start_time_seconds`
+  # (detecta crash-loop mesmo quando o scrape individual "passa" por sorte
+  # de bater entre um crash e outro). Incidente real 2026-09-17: 32h de
+  # crash-loop sem nenhum alerta — ver .specs/project/DECISIONS.md D-2026-09-17-1.
+  - job_name: loki
+    static_configs:
+      - targets: ['loki:3100']
+        labels: { service: platform-loki }
+
   # Host-mapped services (PM2, not yet containerized) — reached via
   # host.docker.internal, same pattern already used by grafana/otel-collector.
   #

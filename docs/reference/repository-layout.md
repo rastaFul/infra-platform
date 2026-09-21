@@ -62,6 +62,31 @@ The harness convention is "every session reads `.specs/project/STATE.md`, resolv
 - **Don't** run a harness session from the home directory or from `~/projects/` directly — `cd` into the actual repo first. If genuinely cross-repo, use `infra-platform/.specs/` on purpose, not by accident.
 - **Don't** create a new repo to hold "state" without asking whether it should just be a directory inside the repo the state is actually about.
 
+## Shared account-level resources (not a container, not in `platform/`)
+
+Some shared infra isn't a container in `platform/docker-compose.yml` — it's a resource on one
+account (this user's) that multiple project repos draw on. Cloudflare Tunnel (`tunnel/`) is the
+existing example: one tunnel, one account, documented here and in ADR 011, never redefined
+per-project. The same pattern applies to:
+
+- **Resend** (transactional email, `resend.com`, external SaaS — no container, nothing to run).
+  One account owns the domain `rastaful.dev`, already verified there. Any project can send from
+  `<anything>@rastaful.dev` without new DNS work — verification is per-domain, not per-project.
+  Convention: **one API key per project**, generated in that same account and named in the Resend
+  dashboard after the project (e.g. `rastafinancas`, `artists-booking`), so a key can be revoked or
+  rotated per-project without affecting the others. Same isolation pattern already used for
+  InfluxDB tokens (`INFLUXDB_TOKEN_MICROGROW`, `INFLUXDB_TOKEN_RASTAFINANCAS` — shared service,
+  token scoped per project). Each project stores its own key as `RESEND_API_KEY` in its own
+  `.env`/secrets — never checked into a repo, never shared across projects even though the account
+  is shared.
+  - In use: `rastafinancas` (production, `RESEND_FROM_EMAIL=noreply@rastaful.dev`).
+  - Adopting: `artists-booking` (Spec 55, own key, in progress).
+  - No entry in `platform/docker-compose.yml` for this — there's nothing to containerize.
+
+If a future shared account-level resource shows up (another SaaS API key, another verified
+domain), document it here the same way instead of leaving it for the next session to rediscover
+by inspecting a sibling repo from scratch.
+
 ## Enforcement
 
 Every new infra decision gets an ADR in `infra-platform/docs/explanation/adr/`. Every new operational procedure gets a how-to in `infra-platform/docs/how-to/`. If it's not documented there, it doesn't count as decided — re-derive it from a session transcript otherwise, which is exactly the rework this doc exists to prevent.

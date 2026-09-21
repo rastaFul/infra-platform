@@ -1,0 +1,116 @@
+# Alertas do próprio platform stack (Vault/OTEL/Prometheus/Loki/Grafana/
+# InfluxDB/GlitchTip) — diferente dos arquivos por produto (microgrow.yaml,
+# rastafinancas.yaml, artists-booking.yaml). Layout flat obrigatório (Grafana
+# não recursa subpastas de alerting/provisioning, ver D-2026-09-01-1).
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: platform-loki-health
+    folder: Platform Alerts
+    interval: 1m
+    rules:
+      # Pega scrape falhando (target não respondendo) — pode não disparar
+      # sozinho durante um crash-loop rápido se o scrape acidentalmente bater
+      # numa janela em que o container está de pé entre um crash e outro.
+      # Ver alert-loki-crash-looping abaixo pra esse caso.
+      - uid: alert-loki-down
+        title: "Platform — Loki sem resposta (scrape down) > 2min"
+        condition: C
+        for: 2m
+        noDataState: Alerting
+        execErrState: Alerting
+        labels:
+          severity: critical
+          component: loki
+        annotations:
+          summary: "Prometheus não consegue coletar métricas do Loki (platform-loki)"
+          description: "Verificar: docker ps --filter name=platform-loki | docker logs platform-loki. Sem HEALTHCHECK de Docker nesta imagem (sem shell desde 3.5.8) — este é o único jeito de saber, ver comentário no docker-compose.yml."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus-platform
+            model:
+              editorMode: code
+              expr: up{job="loki"}
+              instant: false
+              range: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              legendFormat: __auto
+              refId: A
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: "__expr__"
+              refId: C
+              type: classic_conditions
+
+      # Complementa o alerta acima: mesmo se o scrape ocasionalmente "passar"
+      # durante um crash-loop, process_start_time_seconds muda a cada boot —
+      # 3+ mudanças em 15min é reinício repetido, não deploy normal.
+      # Cenário real que motivou isto: 2026-09-17, 1065 restarts em 32h,
+      # nenhum alerta disparou porque não existia nem HEALTHCHECK nem este
+      # monitoramento. Ver D-2026-09-17-1.
+      - uid: alert-loki-crash-looping
+        title: "Platform — Loki reiniciando repetidamente (crash-loop)"
+        condition: C
+        for: 0m
+        noDataState: OK
+        execErrState: OK
+        labels:
+          severity: critical
+          component: loki
+        annotations:
+          summary: "Loki mudou de processo (reiniciou) 3+ vezes nos últimos 15 minutos"
+          description: "Provável crash-loop. Verificar: docker logs platform-loki --tail 100. Causa mais comum até hoje: índice TSDB corrompido em /loki/chunks/index/ — ver runbook em docs/how-to/ (a criar) ou D-2026-09-17-1 em .specs/project/DECISIONS.md."
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus-platform
+            model:
+              editorMode: code
+              expr: changes(process_start_time_seconds{job="loki"}[15m])
+              instant: false
+              range: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              legendFormat: __auto
+              refId: A
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [3]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: "__expr__"
+              refId: C
+              type: classic_conditions

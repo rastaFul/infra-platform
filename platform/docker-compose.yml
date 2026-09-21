@@ -207,6 +207,14 @@ services:
     # `service_started` (see below), not `service_healthy` -- Grafana's
     # Loki datasource just retries on first dashboard load if not ready yet,
     # not fatal at boot, same tradeoff otel-collector already accepted.
+    #
+    # 2026-09-17 incident (D-2026-09-17-1, .specs/project/DECISIONS.md):
+    # 32h crash-loop, 1065 restarts, zero alert because nothing outside the
+    # container was watching. Since a real Docker HEALTHCHECK still isn't
+    # possible here, external monitoring covers it instead: Prometheus job
+    # `loki` (see platform/prometheus/prometheus.yml) + 2 alert rules
+    # (`alert-loki-down`, `alert-loki-crash-looping`) in
+    # platform/grafana/provisioning/alerting/platform.yaml.
     restart: always
 
   # ── Dashboards ─────────────────────────────────────────────────────
@@ -233,8 +241,21 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_AUTH_ANONYMOUS_ENABLED=false
       - GF_SERVER_ROOT_URL=https://metrics.rastaful.dev
+      # Gmail (pre-2026-09-17) never had GF_SMTP_USER/PASSWORD set at all --
+      # not just an invalid credential, no credential existed (confirmed
+      # reading this file, D-2026-09-01-1's "530 Authentication Required"
+      # traces back to this). Switched to Resend (D-2026-09-09-5, executed
+      # now per D-2026-09-17-2): still requires YOUR action to activate --
+      # SMTP_PASSWORD is empty until you create a Resend account + verify
+      # the rastaful.dev domain + generate an API key. See
+      # docs/how-to/setup-resend-smtp-alerts.md. Until then GF_SMTP_ENABLED
+      # stays true but sends will fail the same way Gmail's did (visible in
+      # `docker logs platform-grafana`, not silent) -- alert *evaluation* is
+      # unaffected either way (see D-2026-09-17-2 classic_conditions fix).
       - GF_SMTP_ENABLED=true
-      - GF_SMTP_HOST=${SMTP_HOST:-smtp.gmail.com:587}
+      - GF_SMTP_HOST=${SMTP_HOST:-smtp.resend.com:587}
+      - GF_SMTP_USER=${SMTP_USER:-resend}
+      - GF_SMTP_PASSWORD=${SMTP_PASSWORD}
       - GF_SMTP_FROM_ADDRESS=${SMTP_FROM:-noreply@rastaful.dev}
       - INFLUXDB_TOKEN_MICROGROW=${INFLUXDB_TOKEN_MICROGROW}
       - INFLUXDB_TOKEN_RASTAFINANCAS=${INFLUXDB_TOKEN_RASTAFINANCAS}
