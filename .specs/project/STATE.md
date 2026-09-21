@@ -153,8 +153,11 @@ real da bomba (`pump_events`) em vez de checar "sem variação em 2h" isolado �
 **Pendências que dependem de ação SUA, não do agente**:
 1. Ativar SMTP de verdade: criar conta Resend + verificar domínio `rastaful.dev` + gerar API key
    (`docs/how-to/setup-resend-smtp-alerts.md`), colar em `platform/.env` (`SMTP_PASSWORD`).
-2. Dado de teste do harness-dev ficou em `lights_compliance` (`light_id` "flower-live-true/false",
-   usado pra provar o fix) — cosmético, sem risco, avisar se quiser que eu limpe.
+
+**Fechado 2026-09-21 (D-2026-09-21-6)**: dado de teste em `lights_compliance` removido (tabela
+inteira dropada via `influxdb3 delete table` — só existiam 4 linhas, todas do mesmo teste do
+harness-dev, sem dado real; InfluxDB 3 Core não suporta delete por linha). Recriada sozinha no
+próximo write real.
 - current task: nenhuma pendente de execução do harness-infra.
 
 ## Session: infra-full-upgrade-2026-09-followups

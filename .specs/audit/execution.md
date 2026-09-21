@@ -1387,3 +1387,22 @@ registrado, aguardando decisão).
   main confirma "Branch: renamed refs/heads/master to refs/heads/main" na raiz do histórico real,
   sem commit órfão sobrando.
 - ADR-013 atualizado (tabela + seção de fechamento). Status: DONE.
+
+## Task: infra-platform opensource-prep (parcial) — 2026-09-21T15:12:10-03:00
+- UUID do túnel: hardcoded -> placeholder
+- gitleaks: PASS
+- LICENSE: adicionado (MIT)
+- commit: c8c82de
+- push: PASS
+- visibilidade: mantida PRIVATE (bloqueada, aguardando revisão manual do usuário)
+- Status: DONE (parcial)
+
+## Task: limpeza de dado de teste em lights_compliance (microgrow) — 2026-09-21
+- Investigado antes de agir: tabela tinha só 4 linhas (main/veg/flower-live-true/flower-live-false),
+  todas do mesmo teste 2026-09-18T01:22-01:24, zero dado real, zero referência em dashboards.
+- Limitação descoberta: InfluxDB 3 Core não suporta DELETE por linha via SQL (DML not supported:
+  Delete). influxdb3 delete rows é Enterprise-only.
+- Ação: influxdb3 delete table --database sensors lights_compliance (soft delete, não hard).
+- Verificado: information_schema.tables sem lights_compliance; reservoir (34947 linhas reais)
+  intocada.
+- Status: DONE

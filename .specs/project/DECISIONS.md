@@ -1,5 +1,27 @@
 # DECISIONS
 
+## D-2026-09-21-6: `lights_compliance` — dado de teste do harness-dev removido
+Item cosmético registrado em D-2026-09-18-1 (item 3): `light_id` "flower-live-true"/
+"flower-live-false", usado só pra provar o fix do parser `json_v2` (2026-09-18). Usuário pediu
+limpeza explícita.
+
+Investigado antes de agir (não assumido): a tabela inteira tinha só **4 linhas, todas do mesmo
+teste** (`main`/`veg`/`flower-live-true`/`flower-live-false`, todas com timestamp dentro da mesma
+janela de ~2 minutos em 2026-09-18T01:22-01:24) — nenhuma linha de telemetria real, `main`/`veg`
+inclusos (também eram parte da verificação do fix, não dado de produção). Nenhum dashboard
+referencia `light_id`/`lights_compliance` hoje (grep vazio em `platform/dashboards/microgrow/`).
+
+**Limitação real do motor descoberta**: InfluxDB 3 Core não suporta `DELETE` por linha via SQL
+(`DML not supported: Delete` — recurso `influxdb3 delete rows` só existe no Enterprise). Única
+opção pra remover dado específico é `influxdb3 delete table` (soft delete, tabela inteira). Como
+100% das linhas existentes eram teste, dropar a tabela inteira igualou exatamente o que o usuário
+pediu, sem perda de dado real. Tabela é recriada automaticamente no próximo write real (comportamento
+padrão de line protocol/Telegraf, sem ação extra necessária).
+
+Executado: `influxdb3 delete table --database sensors lights_compliance` (soft delete, não
+`--hard-delete`). Verificado externamente: `information_schema.tables` não lista mais
+`lights_compliance`; `reservoir` (34.947 linhas reais) intocada, confirma escopo restrito.
+
 ## D-2026-09-21-5: developerFolio + tldr-projects renomeados master→main — ADR-013 fechado
 Usuário rodou `harness-dev` em cada um dos 2 repos escalados desde D-2026-09-08-{1,2}/ADR-013.
 Verificado externamente por mim (não tomado por palavra), repo a repo:
