@@ -233,7 +233,7 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "rawSql": "WITH ranked AS (\n  SELECT status, counter,\n    ROW_NUMBER() OVER (PARTITION BY status ORDER BY time DESC) AS rn\n  FROM rasta_auth_logins_total\n  WHERE $__timeFilter(time)\n),\nlast_vals AS (SELECT * FROM ranked WHERE rn = 1)\nSELECT\n  (SELECT SUM(counter) FROM last_vals WHERE status = 'success') * 100.0\n  / NULLIF((SELECT SUM(counter) FROM last_vals), 0) AS value",
+          "rawSql": "WITH ranked AS (\n  SELECT status, counter,\n    ROW_NUMBER() OVER (PARTITION BY status ORDER BY time DESC) AS rn\n  FROM rasta_user_logins_total\n  WHERE $__timeFilter(time)\n),\nlast_vals AS (SELECT * FROM ranked WHERE rn = 1)\nSELECT\n  (SELECT SUM(counter) FROM last_vals WHERE status = 'success') * 100.0\n  / NULLIF((SELECT SUM(counter) FROM last_vals), 0) AS value",
           "format": "table"
         }
       ]
@@ -283,7 +283,7 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "rawSql": "WITH deltas AS (\n  SELECT date_bin($__interval, time) AS time,\n    counter - LAG(counter) OVER (ORDER BY time) AS delta,\n    EXTRACT(EPOCH FROM (time - LAG(time) OVER (ORDER BY time))) AS dt\n  FROM rasta_auth_logins_total\n  WHERE $__timeFilter(time) AND status = 'failure'\n)\nSELECT time, AVG(delta / dt * 3600) AS value\nFROM deltas\nWHERE dt > 0 AND delta >= 0\nGROUP BY time\nORDER BY time",
+          "rawSql": "WITH deltas AS (\n  SELECT date_bin($__interval, time) AS time,\n    counter - LAG(counter) OVER (ORDER BY time) AS delta,\n    EXTRACT(EPOCH FROM (time - LAG(time) OVER (ORDER BY time))) AS dt\n  FROM rasta_user_logins_total\n  WHERE $__timeFilter(time) AND status = 'failure'\n)\nSELECT time, AVG(delta / dt * 3600) AS value\nFROM deltas\nWHERE dt > 0 AND delta >= 0\nGROUP BY time\nORDER BY time",
           "format": "time_series"
         }
       ]
@@ -329,7 +329,7 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "rawSql": "WITH deltas AS (\n  SELECT date_bin($__interval, time) AS time,\n    counter - LAG(counter) OVER (ORDER BY time) AS delta,\n    EXTRACT(EPOCH FROM (time - LAG(time) OVER (ORDER BY time))) AS dt\n  FROM rasta_auth_token_refreshes_total\n  WHERE $__timeFilter(time)\n)\nSELECT time, AVG(delta / dt) AS value\nFROM deltas\nWHERE dt > 0 AND delta >= 0\nGROUP BY time\nORDER BY time",
+          "rawSql": "WITH deltas AS (\n  SELECT date_bin($__interval, time) AS time,\n    counter - LAG(counter) OVER (ORDER BY time) AS delta,\n    EXTRACT(EPOCH FROM (time - LAG(time) OVER (ORDER BY time))) AS dt\n  FROM rasta_token_refresh_total\n  WHERE $__timeFilter(time)\n)\nSELECT time, AVG(delta / dt) AS value\nFROM deltas\nWHERE dt > 0 AND delta >= 0\nGROUP BY time\nORDER BY time",
           "format": "time_series"
         }
       ]
@@ -374,7 +374,7 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "rawSql": "SELECT time, counter AS value FROM rasta_auth_password_resets_total WHERE $__timeFilter(time) ORDER BY time DESC LIMIT 1",
+          "rawSql": "SELECT time, counter AS value FROM rasta_password_reset_total WHERE $__timeFilter(time) ORDER BY time DESC LIMIT 1",
           "format": "table"
         }
       ]

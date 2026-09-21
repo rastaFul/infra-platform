@@ -53,10 +53,8 @@ groups:
               datasource:
                 type: __expr__
                 uid: "__expr__"
-              expression: A
-              reducer: last
               refId: C
-              type: reduce
+              type: classic_conditions
 
       - uid: artists-register-5xx-rate
         title: "Artists Booking — Erro 5xx em /register > 5% (5min)"
@@ -106,10 +104,8 @@ groups:
               datasource:
                 type: __expr__
                 uid: "__expr__"
-              expression: A
-              reducer: last
               refId: C
-              type: reduce
+              type: classic_conditions
 
       - uid: artists-profile-update-5xx-rate
         title: "Artists Booking — Erro 5xx em PATCH /artist/profile > 5% (5min)"
@@ -159,10 +155,8 @@ groups:
               datasource:
                 type: __expr__
                 uid: "__expr__"
-              expression: A
-              reducer: last
               refId: C
-              type: reduce
+              type: classic_conditions
 
       - uid: artists-create-request-5xx-rate
         title: "Artists Booking — Erro 5xx em POST /requests > 5% (5min)"
@@ -212,10 +206,8 @@ groups:
               datasource:
                 type: __expr__
                 uid: "__expr__"
-              expression: A
-              reducer: last
               refId: C
-              type: reduce
+              type: classic_conditions
 
       - uid: artists-upgrade-plan-5xx-rate
         title: "Artists Booking — Erro 5xx em POST /users/upgrade-plan > 5% (5min)"
@@ -265,10 +257,8 @@ groups:
               datasource:
                 type: __expr__
                 uid: "__expr__"
-              expression: A
-              reducer: last
               refId: C
-              type: reduce
+              type: classic_conditions
 
   - orgId: 1
     name: artists-booking-p1-warning
@@ -341,7 +331,5 @@ groups:
               datasource:
                 type: __expr__
                 uid: "__expr__"
-              expression: C
-              reducer: last
               refId: D
-              type: reduce
+              type: classic_conditions

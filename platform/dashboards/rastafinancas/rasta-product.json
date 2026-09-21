@@ -204,7 +204,7 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "rawSql": "WITH deltas AS (\n  SELECT time,\n    counter - LAG(counter) OVER (ORDER BY time) AS delta,\n    EXTRACT(EPOCH FROM (time - LAG(time) OVER (ORDER BY time))) AS dt\n  FROM rasta_import_batches_total\n  WHERE time >= now() - INTERVAL '24 hours'\n)\nSELECT time, delta / dt * 86400 AS value\nFROM deltas\nWHERE dt > 0 AND delta >= 0\nORDER BY time DESC\nLIMIT 1",
+          "rawSql": "WITH deltas AS (\n  SELECT time,\n    counter - LAG(counter) OVER (ORDER BY time) AS delta,\n    EXTRACT(EPOCH FROM (time - LAG(time) OVER (ORDER BY time))) AS dt\n  FROM rasta_import_batch_total\n  WHERE time >= now() - INTERVAL '24 hours'\n)\nSELECT time, delta / dt * 86400 AS value\nFROM deltas\nWHERE dt > 0 AND delta >= 0\nORDER BY time DESC\nLIMIT 1",
           "format": "table"
         }
       ]
@@ -311,7 +311,7 @@
             "type": "influxdb",
             "uid": "influxdb-rastafinancas"
           },
-          "rawSql": "SELECT time, counter AS value FROM rasta_import_errors_total WHERE $__timeFilter(time) ORDER BY time DESC LIMIT 1",
+          "rawSql": "SELECT time, counter AS value FROM rasta_import_batch_total WHERE status = 'error' AND $__timeFilter(time) ORDER BY time DESC LIMIT 1",
           "format": "table"
         }
       ]
