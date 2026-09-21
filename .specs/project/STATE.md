@@ -150,9 +150,11 @@ tinha threshold de 2h claramente baixo demais — sistema espera ~25h entre irri
 real da bomba (`pump_events`) em vez de checar "sem variação em 2h" isolado — alerta preservado
 (usuário pediu explicitamente não perder o alerta), falso-positivo diário eliminado.
 
-**Pendências que dependem de ação SUA, não do agente**:
-1. Ativar SMTP de verdade: criar conta Resend + verificar domínio `rastaful.dev` + gerar API key
-   (`docs/how-to/setup-resend-smtp-alerts.md`), colar em `platform/.env` (`SMTP_PASSWORD`).
+**Fechado 2026-09-21 (D-2026-09-21-7)**: SMTP Resend ativado. Usuário criou a API key e colou em
+`.env` (nunca exposta por mim). Grafana recriado, envio de teste real via API confirmado
+(`HTTP 200 {"status":"success"}`, ~2s de round-trip). Único passo restante é do usuário: conferir
+a caixa de entrada (`rodrigob.dev@gmail.com`) pra confirmação visual final. Endpoint de teste antigo
+do runbook estava obsoleto (removido no Grafana 13.2.1) — runbook atualizado com o novo.
 
 **Fechado 2026-09-21 (D-2026-09-21-6)**: dado de teste em `lights_compliance` removido (tabela
 inteira dropada via `influxdb3 delete table` — só existiam 4 linhas, todas do mesmo teste do

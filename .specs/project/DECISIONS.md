@@ -1,5 +1,32 @@
 # DECISIONS
 
+## D-2026-09-21-7: SMTP Resend ativado de verdade — pendência antiga desde D-2026-09-09-5 fechada
+Usuário criou a API key no próprio Resend (mesma conta/domínio `rastaful.dev` já verificado pelo
+rastafinancas, chave nova nomeada por projeto per a convenção de `repository-layout.md`) e colou
+em `platform/.env` (`SMTP_PASSWORD`) — chave nunca vista/impressa por mim, por pedido explícito do
+usuário de cuidado com o `.env` (só checado com `grep -q`/`printenv | wc -c`, nunca `cat`/echo do
+valor).
+
+Executado (steps 5-6 do runbook `docs/how-to/setup-resend-smtp-alerts.md`):
+- `docker compose up -d --force-recreate grafana` — container recriado, `Healthy`.
+- Confirmado sem expor segredo: `GF_SMTP_PASSWORD` presente no container (37 bytes via
+  `printenv | wc -c`, nunca o valor), `GF_SMTP_HOST`/`USER`/`FROM_ADDRESS` corretos.
+- Envio real de teste, não boot: o endpoint antigo (`/api/alertmanager/.../receivers/test`) foi
+  **removido** no Grafana 13.2.1 (`410 Gone`) — descoberto ao vivo, não documentado antes.
+  Endpoint novo mapeado via API discovery (`/apis/notifications.alerting.grafana.app/v1beta1/...`),
+  schema do body (`integration`+`alerts`, não `receiver`+`alert`) confirmado por tentativa e erro
+  real contra a API + pesquisa externa (`CreateReceiverIntegrationTestRequestBody`), não suposto.
+- Teste no contact point `platform-critical` (integração `email`, endereço
+  `rodrigob.dev@gmail.com`): `HTTP 200 {"status":"success","duration":"1s999ms"}` — ~2s de duração
+  bate com round-trip SMTP real (não instantâneo), zero erro nos logs do Grafana (`docker logs
+  platform-grafana`, filtrado, sem "error"/"fail"/"dial").
+- **Confirmação final pendente do usuário**: checar a caixa de entrada de `rodrigob.dev@gmail.com`
+  pra confirmar o e-mail chegou de fato — não é algo que eu consigo verificar (mesma ressalva já no
+  runbook).
+
+Runbook `docs/how-to/setup-resend-smtp-alerts.md` desatualizado no passo 6 (endpoint antigo) — a
+atualizar numa próxima passada. `SMTP_PASSWORD` deixa de ser pendência.
+
 ## D-2026-09-21-6: `lights_compliance` — dado de teste do harness-dev removido
 Item cosmético registrado em D-2026-09-18-1 (item 3): `light_id` "flower-live-true"/
 "flower-live-false", usado só pra provar o fix do parser `json_v2` (2026-09-18). Usuário pediu

@@ -1406,3 +1406,19 @@ registrado, aguardando decisão).
 - Verificado: information_schema.tables sem lights_compliance; reservoir (34947 linhas reais)
   intocada.
 - Status: DONE
+
+## Task: SMTP Resend ativação real (Grafana alerting) — 2026-09-21
+- Usuário colou SMTP_PASSWORD real em platform/.env (nunca exposto/impresso por mim — só
+  verificado com grep -q / printenv | wc -c).
+- docker compose up -d --force-recreate grafana: Healthy.
+- Env vars confirmadas no container (GF_SMTP_HOST/USER/FROM_ADDRESS corretos, GF_SMTP_PASSWORD
+  presente, valor nunca lido).
+- Achado: endpoint de teste antigo (/api/alertmanager/.../receivers/test) removido no Grafana
+  13.2.1 (410 Gone). Endpoint novo mapeado via API discovery + pesquisa externa (schema
+  integration+alerts, não receiver+alert).
+- Teste real disparado no contact point platform-critical: HTTP 200 {"status":"success",
+  "duration":"1s999ms"}. Zero erro nos logs do Grafana.
+- Runbook docs/how-to/setup-resend-smtp-alerts.md atualizado com o endpoint novo.
+- Pendente (não automatizável): usuário confirmar recebimento visual no inbox
+  rodrigob.dev@gmail.com.
+- Status: DONE (ativação técnica) / aguardando confirmação visual do usuário

@@ -38,14 +38,27 @@ docker compose up -d --force-recreate grafana
 
 ## 6. Verify for real — don't trust "no error on boot"
 
-Grafana only tries to send on an actual alert transition (Normal→Alerting or resolve), so boot succeeding proves nothing. Force a real send:
+Grafana only tries to send on an actual alert transition (Normal→Alerting or resolve), so boot succeeding proves nothing. Force a real send.
+
+**Update 2026-09-21**: the old `/api/alertmanager/grafana/config/api/v1/receivers/test` endpoint was removed in Grafana 13.2.1 (`410 Gone`, "This endpoint has been removed"). Use the new k8s-style app API instead. First find the receiver's `metadata.name` (base64 of the title, not the `uid` field — GET-by-uid 404s):
 
 ```bash
 source platform/.env
-curl -s -u "admin:${GRAFANA_ADMIN_PASSWORD}" -X POST \
-  http://127.0.0.1:3010/api/alertmanager/grafana/config/api/v1/receivers/test \
-  -H "Content-Type: application/json" \
-  -d '{"receivers":[{"name":"platform-critical"}],"alert":{"annotations":{"summary":"SMTP test"},"labels":{"severity":"critical"}}}'
+curl -s -u "admin:${GRAFANA_ADMIN_PASSWORD}" \
+  http://127.0.0.1:3010/apis/notifications.alerting.grafana.app/v1beta1/namespaces/default/receivers \
+  | python3 -c "import json,sys; d=json.load(sys.stdin); [print(r['spec']['title'], r['metadata']['name']) for r in d['items']]"
 ```
 
-Then check the actual inbox (`rodrigob.dev@gmail.com`, per `contact-points.yaml`) and `docker logs platform-grafana | grep -i smtp` for either a successful send log or the real error (auth, DNS, rate limit) — same "no external verification, no trust" rule as everything else in this repo.
+Then test with the receiver's actual integration (type/uid/settings — copy from the receiver's `spec.integrations[0]`, e.g. via `GET .../receivers/<name>`), body shape is `{integration, alerts}`, **not** `{receiver, alert}` like the old API:
+
+```bash
+curl -s -u "admin:${GRAFANA_ADMIN_PASSWORD}" -X POST \
+  "http://127.0.0.1:3010/apis/notifications.alerting.grafana.app/v1beta1/namespaces/default/receivers/<base64-name>/test" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "integration": {"type":"email","uid":"critical-email","settings":{"addresses":"rodrigob.dev@gmail.com","singleEmail":false,"subject":"test"}},
+    "alerts": [{"annotations":{"summary":"SMTP test"},"labels":{"severity":"critical"}}]
+  }'
+```
+
+`{"status":"success","duration":"...ms"}` with HTTP 200 means Grafana actually completed the SMTP transaction (a multi-second duration confirms a real network round-trip, not an instant fake pass). Then check the actual inbox (`rodrigob.dev@gmail.com`, per `contact-points.yaml`) and `docker logs platform-grafana | grep -i smtp` for either a successful send log or the real error (auth, DNS, rate limit) — same "no external verification, no trust" rule as everything else in this repo.
