@@ -1345,3 +1345,20 @@ Demais 71 queries (dos 76) auditadas quanto a nome de measurement — nenhum out
 encontrado.
 Status: DONE (5 bugs corrigidos e verificados; achado de design do alerta do reservatório
 registrado, aguardando decisão).
+
+## Task: docker-disk-cleanup — fechamento + registro/push do backlog de sessões anteriores — 2026-09-21
+- Pendências fechadas pelo usuário (D-2026-09-21-3), verificadas ao vivo via PowerShell:
+  docker_data.vhdx 88GB->30.7GB, C: livre 5GB->76.8GB.
+- Instrução de uso criada ao lado do script já existente na Área de Trabalho real do Windows
+  (`C:\Users\rodri\OneDrive\Area de Trabalho\`, script `compactar_docker.bat` pré-existente):
+  `LEIA-ME_compactar_docker.txt`. Runbook atualizado com essa referência.
+- cron: confirmado ativo (`crontab -l` + `service cron status`), entrada
+  `35 3 * * * .../docker-disk-guard.sh` presente, nenhuma ação necessária.
+- Registro e push de todo o backlog de commits pendente (várias sessões nunca commitadas):
+  6 commits (Loki+SMTP, alerting/dashboard fixes, docker-disk-lifecycle, artifact-quota spec,
+  infra-overview-diagram, roadmap) + 1 commit final de fechamento de STATE/DECISIONS/execution.
+  Push: `a097452..5841926 main -> main`.
+- gitleaks: PASS (todos os 7 commits, gate de pre-commit local)
+- shellcheck: PASS (docker-disk-guard.sh)
+- yaml/json syntax: PASS
+- Status: DONE
