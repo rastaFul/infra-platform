@@ -80,3 +80,15 @@ ação manual do usuário (Settings → Profile → Customize your pins).
 por não rotacionar `JWT_SECRET`/`RESEND_API_KEY`/`GOOGLE_CLIENT_SECRET`/
 `GITHUB_CLIENT_SECRET` do `rastafinancas` agora. Repo está público mesmo
 assim, por decisão explícita dele. Recomendação permanece registrada.
+
+## Checkpoint de encerramento — 2026-09-22T13:45:00-03:00
+Sessão encerrada por pedido do usuário, retoma em outra sessão. Ver
+checkpoint completo em `developerFolio/.specs/project/STATE.md` (seção
+"CHECKPOINT DE ENCERRAMENTO"). Resumo rápido do que falta:
+- `rastafinancas`: privado até o usuário rotacionar 4 credenciais reais
+  (JWT_SECRET, RESEND_API_KEY, GOOGLE_CLIENT_SECRET, GITHUB_CLIENT_SECRET).
+- Achados novos de portfólio ainda não decididos: `tldr-projects` (MCP
+  server, incompleto, não enviado ao GitHub) e `dev-environment` (Ansible,
+  privado, candidato a open source).
+- Site/currículo/GitHub profile: 100% atualizados e no ar (bio, README de
+  perfil, 3 conquistas técnicas novas — Istio, MongoDB, Terraform reorg).
